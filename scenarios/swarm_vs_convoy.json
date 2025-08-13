@@ -1,0 +1,77 @@
+{
+  "title": "Swarm vs Convoy",
+  "description": "Multiple drones attacking a moving convoy of tanks",
+  "arena": {
+    "width": 800,
+    "height": 600
+  },
+  "entities": [
+    {
+      "type": "drone",
+      "x": 50,
+      "y": 50,
+      "heading": 0.785,
+      "mode": "random_search"
+    },
+    {
+      "type": "drone",
+      "x": 80,
+      "y": 80,
+      "heading": 0.785,
+      "mode": "random_search"
+    },
+    {
+      "type": "drone",
+      "x": 110,
+      "y": 50,
+      "heading": 0.785,
+      "mode": "random_search"
+    },
+    {
+      "type": "drone",
+      "x": 140,
+      "y": 80,
+      "heading": 0.785,
+      "mode": "random_search"
+    },
+    {
+      "type": "tank",
+      "x": 400,
+      "y": 100,
+      "heading": 1.57,
+      "mode": "patrol_route",
+      "patrol_route": [
+        {"x": 400, "y": 100},
+        {"x": 400, "y": 500},
+        {"x": 600, "y": 500},
+        {"x": 600, "y": 100}
+      ]
+    },
+    {
+      "type": "tank",
+      "x": 440,
+      "y": 100,
+      "heading": 1.57,
+      "mode": "patrol_route",
+      "patrol_route": [
+        {"x": 440, "y": 100},
+        {"x": 440, "y": 500},
+        {"x": 640, "y": 500},
+        {"x": 640, "y": 100}
+      ]
+    },
+    {
+      "type": "tank",
+      "x": 480,
+      "y": 100,
+      "heading": 1.57,
+      "mode": "patrol_route",
+      "patrol_route": [
+        {"x": 480, "y": 100},
+        {"x": 480, "y": 500},
+        {"x": 680, "y": 500},
+        {"x": 680, "y": 100}
+      ]
+    }
+  ]
+}

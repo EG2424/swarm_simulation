@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Swarm Simulation</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <h1 class="title">LLM Swarm</h1>
+                <div class="simulation-status">
+                    <span id="status-indicator" class="status-indicator stopped">●</span>
+                    <span id="status-text">Stopped</span>
+                </div>
+            </div>
+            
+            <div class="header-controls">
+                <div class="control-group">
+                    <button id="start-btn" class="control-btn primary">Start</button>
+                    <button id="pause-btn" class="control-btn">Pause</button>
+                    <button id="reset-btn" class="control-btn danger">Reset</button>
+                </div>
+                
+                <div class="control-group">
+                    <label for="speed-slider" class="control-label">Speed:</label>
+                    <input type="range" id="speed-slider" class="slider" min="0.1" max="5.0" step="0.1" value="1.0">
+                    <span id="speed-display" class="value-display">1.0x</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Left Sidebar -->
+            <aside class="sidebar left-sidebar">
+                <div class="sidebar-section">
+                    <h3 class="section-title">Entities</h3>
+                    <div class="entity-controls">
+                        <button id="add-drone-btn" class="add-btn drone">+ Drone</button>
+                        <button id="add-tank-btn" class="add-btn tank">+ Tank</button>
+                    </div>
+                    
+                    <div class="entity-filters">
+                        <label class="filter-label">
+                            <input type="checkbox" id="filter-drones" checked> Drones
+                        </label>
+                        <label class="filter-label">
+                            <input type="checkbox" id="filter-tanks" checked> Tanks
+                        </label>
+                        <label class="filter-label">
+                            <input type="checkbox" id="filter-destroyed"> Destroyed
+                        </label>
+                    </div>
+                    
+                    <div id="entity-list" class="entity-list"></div>
+                </div>
+                
+                <div class="sidebar-section">
+                    <h3 class="section-title">Scenarios</h3>
+                    <select id="scenario-select" class="scenario-select">
+                        <option value="">Select Scenario...</option>
+                    </select>
+                    <button id="load-scenario-btn" class="load-btn">Load</button>
+                </div>
+            </aside>
+
+            <!-- Canvas Area -->
+            <div class="canvas-container">
+                <div class="canvas-controls">
+                    <div class="control-group">
+                        <label for="zoom-slider" class="control-label">Zoom:</label>
+                        <input type="range" id="zoom-slider" class="slider" min="0.5" max="3.0" step="0.1" value="1.0">
+                        <span id="zoom-display" class="value-display">100%</span>
+                    </div>
+                    
+                    <div class="control-group">
+                        <label for="entity-scale-slider" class="control-label">Entity Size:</label>
+                        <input type="range" id="entity-scale-slider" class="slider" min="0.2" max="3.0" step="0.1" value="1.0">
+                        <span id="entity-scale-display" class="value-display">100%</span>
+                    </div>
+                    
+                    <div class="metrics-display">
+                        <span id="fps-counter">FPS: 0</span>
+                        <span id="entity-counter">Entities: 0</span>
+                    </div>
+                </div>
+                
+                <canvas id="simulation-canvas" width="800" height="600"></canvas>
+                
+                <div class="canvas-overlay">
+                    <div id="selection-info" class="selection-info hidden">
+                        <div class="selection-header">
+                            <span id="selection-title">Selected Entity</span>
+                            <button id="deselect-btn" class="close-btn">×</button>
+                        </div>
+                        <div class="selection-details">
+                            <div id="selection-status"></div>
+                            <div id="selection-controls"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Sidebar -->
+            <aside class="sidebar right-sidebar">
+                <div class="sidebar-section">
+                    <h3 class="section-title">Control Panel</h3>
+                    <div id="entity-control-panel" class="control-panel">
+                        <div class="no-selection">Select an entity to control</div>
+                    </div>
+                </div>
+                
+                <div class="sidebar-section chat-section">
+                    <h3 class="section-title">Chat & Events</h3>
+                    <div class="chat-tabs">
+                        <button id="chat-tab" class="tab-btn active">Chat</button>
+                        <button id="events-tab" class="tab-btn">Events</button>
+                    </div>
+                    
+                    <div id="chat-panel" class="chat-panel">
+                        <div id="chat-messages" class="chat-messages"></div>
+                        <div class="chat-input-group">
+                            <input type="text" id="chat-input" class="chat-input" placeholder="Type message...">
+                            <button id="send-chat-btn" class="send-btn">Send</button>
+                        </div>
+                    </div>
+                    
+                    <div id="events-panel" class="events-panel hidden">
+                        <div id="events-list" class="events-list"></div>
+                        <button id="clear-events-btn" class="clear-btn">Clear Events</button>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <!-- Context Menu -->
+    <div id="context-menu" class="context-menu hidden">
+        <div class="context-item" data-action="select">Select</div>
+        <div class="context-item" data-action="move-here">Move Here</div>
+        <div class="context-item" data-action="patrol-here">Patrol Here</div>
+        <div class="context-item" data-action="remove">Remove</div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/js/websocket.js"></script>
+    <script src="/static/js/renderer.js"></script>
+    <script src="/static/js/ui-controls.js"></script>
+    <script src="/static/js/entity-controls.js"></script>
+    <script src="/static/js/chat.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

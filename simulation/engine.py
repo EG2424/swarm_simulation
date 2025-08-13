@@ -1,0 +1,432 @@
+"""
+Simulation Engine - Core simulation loop with fixed timestep
+"""
+
+import time
+import uuid
+import math
+import json
+import logging
+from typing import Dict, List, Optional, Any, Tuple
+from pathlib import Path
+
+from communication.schemas import *
+from simulation.entities import Drone, Tank, Entity
+
+
+logger = logging.getLogger(__name__)
+
+
+class SimulationEngine:
+    """Main simulation engine with fixed timestep and entity management"""
+    
+    def __init__(self, dt: float = 1.0/60.0):  # 60 FPS default
+        self.dt = dt  # Fixed timestep
+        self.base_dt = dt  # Base timestep for speed scaling
+        self.speed_multiplier = 1.0
+        self.state = SimulationState.STOPPED
+        
+        # World properties
+        self.arena_bounds = (800.0, 600.0)  # width, height
+        
+        # Entity storage
+        self.entities: Dict[str, Entity] = {}
+        self.selected_entities: List[str] = []
+        
+        # Event system
+        self.events: List[SimulationEvent] = []
+        self.chat_messages: List[ChatMessage] = []
+        
+        # Metrics
+        self.simulation_time = 0.0
+        self.total_spawned = 0
+        self.total_destroyed = 0
+        
+        # Scenario system
+        self.current_scenario = None
+        self.scenario_data = {}
+        
+        # Performance tracking
+        self.last_update_time = time.time()
+        self.update_count = 0
+        self.fps = 0.0
+        
+        # Initialize with demo entities
+        self._spawn_demo_entities()
+        
+    def get_state(self) -> Dict[str, Any]:
+        """Get complete simulation state"""
+        return {
+            "simulation": {
+                "state": self.state.value,
+                "time": self.simulation_time,
+                "dt": self.dt,
+                "speed_multiplier": self.speed_multiplier,
+                "fps": self.fps,
+                "arena_bounds": {"width": self.arena_bounds[0], "height": self.arena_bounds[1]}
+            },
+            "entities": [entity.to_dict() for entity in self.entities.values()],
+            "selected_entities": self.selected_entities,
+            "metrics": {
+                "total_entities": len(self.entities),
+                "total_spawned": self.total_spawned,
+                "total_destroyed": self.total_destroyed,
+                "drones": len([e for e in self.entities.values() if isinstance(e, Drone)]),
+                "tanks": len([e for e in self.entities.values() if isinstance(e, Tank)]),
+                "destroyed": len([e for e in self.entities.values() if e.destroyed])
+            },
+            "events": [event.dict() for event in self.events[-50:]],  # Last 50 events
+            "chat_messages": [msg.dict() for msg in self.chat_messages[-100:]]  # Last 100 messages
+        }
+    
+    def update(self) -> Optional[Dict[str, Any]]:
+        """Main simulation update - returns delta state if changed"""
+        if self.state != SimulationState.RUNNING:
+            return None
+            
+        current_time = time.time()
+        
+        # Update all entities
+        for entity in self.entities.values():
+            entity.update(self.dt, self.arena_bounds, self.entities)
+        
+        # Check for entity interactions
+        self._check_interactions()
+        
+        # Clean up destroyed entities (after some delay)
+        self._cleanup_destroyed_entities()
+        
+        # Update simulation time
+        self.simulation_time += self.dt
+        
+        # Update performance metrics
+        self.update_count += 1
+        if current_time - self.last_update_time >= 1.0:
+            self.fps = self.update_count
+            self.update_count = 0
+            self.last_update_time = current_time
+        
+        # Return delta state (for now, return full state)
+        return self.get_state()
+    
+    def _check_interactions(self):
+        """Check for entity interactions (detection, collisions)"""
+        drones = [e for e in self.entities.values() if isinstance(e, Drone) and not e.destroyed]
+        tanks = [e for e in self.entities.values() if isinstance(e, Tank) and not e.destroyed]
+        
+        # Drone-Tank detection and engagement
+        for drone in drones:
+            for tank in tanks:
+                distance = drone.distance_to(tank)
+                
+                # Detection
+                if distance <= drone.physics.detection_radius:
+                    if not tank.detected:
+                        tank.detected = True
+                        self._add_event(DetectionEvent(
+                            timestamp=self.simulation_time,
+                            detector_id=drone.id,
+                            target_id=tank.id,
+                            distance=distance
+                        ))
+                
+                # Kamikaze engagement (very close range)
+                if distance <= 5.0 and drone.status == "engaging":
+                    self._engage_kamikaze(drone, tank)
+    
+    def _engage_kamikaze(self, drone: Drone, tank: Tank):
+        """Handle kamikaze engagement between drone and tank"""
+        if not drone.destroyed and not tank.destroyed:
+            drone.destroyed = True
+            tank.destroyed = True
+            drone.stop()
+            tank.stop()
+            
+            self.total_destroyed += 2
+            
+            self._add_event(KamikazeEvent(
+                timestamp=self.simulation_time,
+                drone_id=drone.id,
+                tank_id=tank.id,
+                data={"position": {"x": drone.position.x, "y": drone.position.y}}
+            ))
+            
+            logger.info(f"Kamikaze engagement: Drone {drone.id} destroyed Tank {tank.id}")
+    
+    def _cleanup_destroyed_entities(self):
+        """Remove destroyed entities after delay (for visual feedback)"""
+        # For now, keep destroyed entities for visual purposes
+        # In future, could add cleanup timer
+        pass
+    
+    def _add_event(self, event: SimulationEvent):
+        """Add event to event log"""
+        self.events.append(event)
+        if len(self.events) > 1000:  # Keep last 1000 events
+            self.events = self.events[-1000:]
+    
+    def handle_control_command(self, command: SimulationControlRequest) -> Dict[str, Any]:
+        """Handle simulation control commands"""
+        try:
+            if command.action == "start":
+                self.state = SimulationState.RUNNING
+                logger.info("Simulation started")
+                
+            elif command.action == "pause":
+                self.state = SimulationState.PAUSED
+                logger.info("Simulation paused")
+                
+            elif command.action == "reset":
+                self._reset_simulation()
+                logger.info("Simulation reset")
+                
+            elif command.action == "set_speed":
+                if command.speed_multiplier is not None:
+                    self.speed_multiplier = max(0.1, min(10.0, command.speed_multiplier))
+                    self.dt = self.base_dt * self.speed_multiplier
+                    logger.info(f"Simulation speed set to {self.speed_multiplier}x")
+            
+            return {"success": True, "state": self.state.value}
+            
+        except Exception as e:
+            logger.error(f"Control command error: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def spawn_entity(self, request: SpawnEntityRequest) -> Entity:
+        """Spawn new entity"""
+        entity_id = str(uuid.uuid4())
+        
+        if request.type == EntityType.DRONE:
+            entity = Drone(entity_id, request.position.x, request.position.y, request.heading)
+            if request.mode:
+                entity.set_mode(request.mode)
+        elif request.type == EntityType.TANK:
+            entity = Tank(entity_id, request.position.x, request.position.y, request.heading)
+            if request.mode:
+                entity.set_mode(request.mode)
+        else:
+            raise ValueError(f"Unknown entity type: {request.type}")
+        
+        self.entities[entity_id] = entity
+        self.total_spawned += 1
+        
+        logger.info(f"Spawned {request.type.value} {entity_id} at ({request.position.x}, {request.position.y})")
+        
+        return entity
+    
+    def command_entity(self, entity_id: str, command: EntityCommandRequest) -> Dict[str, Any]:
+        """Send command to entity"""
+        if entity_id not in self.entities:
+            raise ValueError(f"Entity {entity_id} not found")
+        
+        entity = self.entities[entity_id]
+        
+        try:
+            if isinstance(entity, Drone):
+                entity.set_mode(
+                    command.mode,
+                    target_position=command.target_position,
+                    target_entity_id=command.target_entity_id,
+                    patrol_route=command.patrol_route or []
+                )
+            elif isinstance(entity, Tank):
+                entity.set_mode(
+                    command.mode,
+                    target_position=command.target_position,
+                    patrol_route=command.patrol_route or []
+                )
+            
+            logger.info(f"Commanded {entity.type.value} {entity_id} to {command.mode.value}")
+            return {"success": True}
+            
+        except Exception as e:
+            logger.error(f"Entity command error: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def remove_entity(self, entity_id: str) -> Dict[str, Any]:
+        """Remove entity from simulation"""
+        if entity_id not in self.entities:
+            return {"success": False, "error": "Entity not found"}
+        
+        entity = self.entities.pop(entity_id)
+        
+        # Remove from selection
+        if entity_id in self.selected_entities:
+            self.selected_entities.remove(entity_id)
+        
+        # Add destruction event
+        self._add_event(EntityDestroyedEvent(
+            timestamp=self.simulation_time,
+            entity_id=entity_id,
+            destroyed_id=entity_id,
+            cause="removed"
+        ))
+        
+        logger.info(f"Removed {entity.type.value} {entity_id}")
+        return {"success": True}
+    
+    def select_entity(self, entity_id: str, selected: bool = True, multi_select: bool = False) -> Dict[str, Any]:
+        """Handle entity selection"""
+        if entity_id not in self.entities:
+            return {"success": False, "error": "Entity not found"}
+        
+        entity = self.entities[entity_id]
+        
+        if not multi_select:
+            # Clear previous selections
+            for eid in self.selected_entities:
+                if eid in self.entities:
+                    self.entities[eid].selected = False
+            self.selected_entities.clear()
+        
+        if selected:
+            if entity_id not in self.selected_entities:
+                self.selected_entities.append(entity_id)
+            entity.selected = True
+        else:
+            if entity_id in self.selected_entities:
+                self.selected_entities.remove(entity_id)
+            entity.selected = False
+        
+        return {"success": True, "selected_count": len(self.selected_entities)}
+    
+    def add_chat_message(self, message: ChatMessage) -> Dict[str, Any]:
+        """Add message to chat log"""
+        message.timestamp = self.simulation_time
+        self.chat_messages.append(message)
+        
+        # Keep last 500 messages
+        if len(self.chat_messages) > 500:
+            self.chat_messages = self.chat_messages[-500:]
+        
+        return {"success": True}
+    
+    def list_scenarios(self) -> Dict[str, Any]:
+        """List available scenarios"""
+        scenarios_dir = Path("scenarios")
+        scenarios = []
+        
+        if scenarios_dir.exists():
+            for file_path in scenarios_dir.glob("*.json"):
+                try:
+                    with open(file_path, 'r') as f:
+                        scenario_data = json.load(f)
+                        scenarios.append({
+                            "name": file_path.stem,
+                            "title": scenario_data.get("title", file_path.stem),
+                            "description": scenario_data.get("description", ""),
+                            "entities": len(scenario_data.get("entities", []))
+                        })
+                except Exception as e:
+                    logger.error(f"Error loading scenario {file_path}: {e}")
+        
+        return {"scenarios": scenarios}
+    
+    def load_scenario(self, request: LoadScenarioRequest) -> Dict[str, Any]:
+        """Load scenario from file"""
+        scenario_path = Path("scenarios") / f"{request.scenario_name}.json"
+        
+        if not scenario_path.exists():
+            return {"success": False, "error": "Scenario file not found"}
+        
+        try:
+            with open(scenario_path, 'r') as f:
+                scenario_data = json.load(f)
+            
+            # Reset simulation
+            self._reset_simulation()
+            
+            # Set arena bounds if specified
+            if "arena" in scenario_data:
+                arena = scenario_data["arena"]
+                self.arena_bounds = (arena.get("width", 800), arena.get("height", 600))
+            
+            # Spawn entities
+            for entity_data in scenario_data.get("entities", []):
+                spawn_request = SpawnEntityRequest(
+                    type=EntityType(entity_data["type"]),
+                    position=Vector2D(x=entity_data["x"], y=entity_data["y"]),
+                    heading=entity_data.get("heading", 0.0)
+                )
+                
+                entity = self.spawn_entity(spawn_request)
+                
+                # Set entity properties
+                if "mode" in entity_data:
+                    if entity_data["type"] == "drone":
+                        mode = DroneMode(entity_data["mode"])
+                    else:
+                        mode = TankMode(entity_data["mode"])
+                    
+                    command = EntityCommandRequest(
+                        mode=mode,
+                        target_position=Vector2D(
+                            x=entity_data["target_x"], y=entity_data["target_y"]
+                        ) if "target_x" in entity_data else None,
+                        patrol_route=[
+                            Vector2D(x=p["x"], y=p["y"]) for p in entity_data.get("patrol_route", [])
+                        ]
+                    )
+                    
+                    self.command_entity(entity.id, command)
+            
+            self.current_scenario = request.scenario_name
+            self.scenario_data = scenario_data
+            
+            logger.info(f"Loaded scenario: {request.scenario_name}")
+            return {"success": True, "entities_loaded": len(scenario_data.get("entities", []))}
+            
+        except Exception as e:
+            logger.error(f"Error loading scenario: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def _reset_simulation(self):
+        """Reset simulation to initial state"""
+        self.state = SimulationState.STOPPED
+        self.entities.clear()
+        self.selected_entities.clear()
+        self.events.clear()
+        self.chat_messages.clear()
+        self.simulation_time = 0.0
+        self.total_spawned = 0
+        self.total_destroyed = 0
+        self.current_scenario = None
+        self.scenario_data = {}
+        
+        logger.info("Simulation reset")
+    
+    def _spawn_demo_entities(self):
+        """Spawn some demo entities for initial demonstration"""
+        try:
+            # Spawn 2 drones
+            drone1 = Drone("demo_drone_1", 150, 100)
+            drone1.mode = DroneMode.RANDOM_SEARCH
+            self.entities[drone1.id] = drone1
+            self.total_spawned += 1
+            
+            drone2 = Drone("demo_drone_2", 650, 100)
+            drone2.mode = DroneMode.RANDOM_SEARCH  
+            self.entities[drone2.id] = drone2
+            self.total_spawned += 1
+            
+            # Spawn 2 tanks
+            tank1 = Tank("demo_tank_1", 300, 300)
+            tank1.mode = TankMode.PATROL_ROUTE
+            tank1.patrol_route = [
+                Vector2D(x=250, y=250),
+                Vector2D(x=350, y=250),
+                Vector2D(x=350, y=350),
+                Vector2D(x=250, y=350)
+            ]
+            self.entities[tank1.id] = tank1
+            self.total_spawned += 1
+            
+            tank2 = Tank("demo_tank_2", 500, 400)
+            tank2.mode = TankMode.HIDE_AND_AMBUSH
+            self.entities[tank2.id] = tank2
+            self.total_spawned += 1
+            
+            logger.info(f"Spawned {len(self.entities)} demo entities")
+            
+        except Exception as e:
+            logger.error(f"Error spawning demo entities: {e}")

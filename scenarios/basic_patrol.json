@@ -1,0 +1,57 @@
+{
+  "title": "Basic Patrol Scenario",
+  "description": "Simple patrol scenario with drones searching and tanks patrolling",
+  "arena": {
+    "width": 800,
+    "height": 600
+  },
+  "entities": [
+    {
+      "type": "drone",
+      "x": 100,
+      "y": 100,
+      "heading": 0,
+      "mode": "random_search"
+    },
+    {
+      "type": "drone",
+      "x": 700,
+      "y": 100,
+      "heading": 3.14,
+      "mode": "random_search"
+    },
+    {
+      "type": "tank",
+      "x": 200,
+      "y": 300,
+      "heading": 0,
+      "mode": "patrol_route",
+      "patrol_route": [
+        {"x": 150, "y": 250},
+        {"x": 250, "y": 250},
+        {"x": 250, "y": 350},
+        {"x": 150, "y": 350}
+      ]
+    },
+    {
+      "type": "tank",
+      "x": 600,
+      "y": 400,
+      "heading": 1.57,
+      "mode": "patrol_route",
+      "patrol_route": [
+        {"x": 550, "y": 350},
+        {"x": 650, "y": 350},
+        {"x": 650, "y": 450},
+        {"x": 550, "y": 450}
+      ]
+    },
+    {
+      "type": "tank",
+      "x": 400,
+      "y": 500,
+      "heading": 0,
+      "mode": "hide_and_ambush"
+    }
+  ]
+}
