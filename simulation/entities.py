@@ -69,6 +69,10 @@ class Entity(ABC):
     
     def _update_physics(self, dt: float, arena_bounds: Tuple[float, float]):
         """Apply unicycle kinematics and constraints"""
+        # Skip physics updates for destroyed entities
+        if self.destroyed:
+            return
+            
         # Calculate speed from velocity magnitude
         speed = math.sqrt(self.velocity.x**2 + self.velocity.y**2)
         
@@ -165,8 +169,17 @@ class Entity(ABC):
         if isinstance(self, Drone):
             base_dict.update({
                 "kamikaze_enabled": getattr(self, 'kamikaze_enabled', True),
-                "kamikaze_target": getattr(self, 'kamikaze_target', None)
+                "kamikaze_target": getattr(self, 'kamikaze_target', None),
+                "kamikaze_impact_position": {
+                    "x": self.kamikaze_impact_position.x, "y": self.kamikaze_impact_position.y
+                } if getattr(self, 'kamikaze_impact_position', None) else None
             })
+        
+        # Add kamikaze impact position for tanks too (in case they were hit by kamikaze)
+        if hasattr(self, 'kamikaze_impact_position') and self.kamikaze_impact_position:
+            base_dict["kamikaze_impact_position"] = {
+                "x": self.kamikaze_impact_position.x, "y": self.kamikaze_impact_position.y
+            }
             
         return base_dict
 
@@ -189,6 +202,7 @@ class Drone(Entity):
         # Kamikaze settings
         self.kamikaze_enabled = True  # Can be toggled via GUI
         self.kamikaze_target: Optional[str] = None
+        self.kamikaze_impact_position: Optional[Vector2D] = None  # Position where kamikaze impact occurred
         
     def _update_behavior(self, dt: float, entities: Dict[str, Entity]):
         """Update drone AI behavior"""
@@ -270,8 +284,9 @@ class Drone(Entity):
                     self.status = "tracking"
                     self.engage_timer += dt
                     
-                    # Kamikaze after tracking for 2 seconds (only if enabled)
-                    if self.engage_timer >= 2.0 and self.kamikaze_enabled:
+                    # Kamikaze after tracking for 1.5 seconds (only if enabled)
+                    if self.engage_timer >= 1.5 and self.kamikaze_enabled:
+                        # Execute kamikaze attack
                         self._engage_kamikaze(entity)
                         return
                     else:
@@ -338,7 +353,7 @@ class Drone(Entity):
             self.move_towards(nearest_tank.position, self.physics.max_speed)
             
             # Engage kamikaze when very close
-            if min_distance <= 5.0:
+            if min_distance <= 8.0:
                 self._engage_kamikaze(nearest_tank)
                 return
                 
@@ -357,11 +372,39 @@ class Drone(Entity):
     
     def _engage_kamikaze(self, target: 'Tank'):
         """Engage kamikaze attack on target tank"""
+        print(f"KAMIKAZE: Before - Drone at ({self.position.x:.1f}, {self.position.y:.1f}), Tank at ({target.position.x:.1f}, {target.position.y:.1f})")
+        
         self.status = "engaging"
+        target.status = "destroyed"
+        
+        # Calculate impact position (midpoint for visual effect)
+        impact_x = (self.position.x + target.position.x) / 2
+        impact_y = (self.position.y + target.position.y) / 2
+        impact_pos = Vector2D(x=impact_x, y=impact_y)
+        
+        # Stop movement first to prevent any further physics updates
+        self.velocity.x = 0
+        self.velocity.y = 0
+        target.velocity.x = 0
+        target.velocity.y = 0
+        
+        # Set kamikaze impact position for both entities
+        self.kamikaze_impact_position = impact_pos
+        target.kamikaze_impact_position = impact_pos
+        
+        # Move both entities to impact position
+        self.position.x = impact_x
+        self.position.y = impact_y
+        target.position.x = impact_x
+        target.position.y = impact_y
+        
+        # Destroy both entities LAST
         self.destroyed = True
         target.destroyed = True
-        self.stop()
-        target.stop()
+        
+        print(f"KAMIKAZE: After - Drone at ({self.position.x:.1f}, {self.position.y:.1f}), Tank at ({target.position.x:.1f}, {target.position.y:.1f})")
+        print(f"KAMIKAZE: Impact position set to ({impact_x:.1f}, {impact_y:.1f})")
+        print(f"KAMIKAZE: Drone destroyed={self.destroyed}, Tank destroyed={target.destroyed}")
     
     def _update_visual_state(self):
         """Update drone color based on status"""
@@ -407,6 +450,7 @@ class Tank(Entity):
         self.patrol_timer = 0.0
         self.flee_timer = 0.0
         self.detected_by_drone = False
+        self.kamikaze_impact_position: Optional[Vector2D] = None  # Position where kamikaze impact occurred
         
         # Default patrol route (small square)
         self.patrol_route = [
