@@ -248,10 +248,7 @@ class UIControls {
         const showTanks = document.getElementById('filter-tanks').checked;
         const showDestroyed = document.getElementById('filter-destroyed').checked;
         
-        // Clear existing list
-        entityList.innerHTML = '';
-        
-        // Filter and display entities
+        // Filter entities first
         const filteredEntities = entities.filter(entity => {
             if (entity.type === 'drone' && !showDrones) return false;
             if (entity.type === 'tank' && !showTanks) return false;
@@ -259,28 +256,79 @@ class UIControls {
             return true;
         });
         
-        for (const entity of filteredEntities) {
-            const item = document.createElement('div');
-            item.className = `entity-item ${entity.selected ? 'selected' : ''}`;
-            item.dataset.entityId = entity.id;
+        // Check if the list actually needs updating
+        const currentItems = entityList.querySelectorAll('.entity-item');
+        const currentIds = Array.from(currentItems).map(item => item.dataset.entityId).sort();
+        const newIds = filteredEntities.map(entity => entity.id).sort();
+        
+        // Only rebuild if entity list changed
+        if (JSON.stringify(currentIds) !== JSON.stringify(newIds)) {
+            // Clear and rebuild list
+            entityList.innerHTML = '';
             
-            item.innerHTML = `
-                <div class="entity-info">
-                    <div class="entity-status" style="background: ${entity.color}"></div>
-                    <span>${entity.type.charAt(0).toUpperCase() + entity.type.slice(1)}</span>
-                    <span class="entity-id">${entity.id.substring(0, 8)}</span>
-                </div>
-                <button class="remove-entity-btn" onclick="window.uiControls.removeEntity('${entity.id}')" title="Remove">×</button>
-            `;
-            
-            // Add click handler for selection
-            item.addEventListener('click', (e) => {
-                if (!e.target.classList.contains('remove-entity-btn')) {
-                    window.wsManager.selectEntity(entity.id, !entity.selected, e.shiftKey);
+            for (const entity of filteredEntities) {
+                const item = this.createEntityListItem(entity);
+                entityList.appendChild(item);
+            }
+        } else {
+            // Just update existing items
+            for (const entity of filteredEntities) {
+                const existingItem = entityList.querySelector(`[data-entity-id="${entity.id}"]`);
+                if (existingItem) {
+                    this.updateEntityListItem(existingItem, entity);
                 }
-            });
+            }
+        }
+    }
+    
+    createEntityListItem(entity) {
+        const item = document.createElement('div');
+        item.className = `entity-item ${entity.selected ? 'selected' : ''}`;
+        item.dataset.entityId = entity.id;
+        
+        item.innerHTML = `
+            <div class="entity-info">
+                <div class="entity-status" style="background: ${entity.color}"></div>
+                <span>${entity.type.charAt(0).toUpperCase() + entity.type.slice(1)}</span>
+                <span class="entity-id">${entity.id.substring(0, 8)}</span>
+            </div>
+            <button class="remove-entity-btn" onclick="window.uiControls.removeEntity('${entity.id}')" title="Remove">×</button>
+        `;
+        
+        // Add click handler for selection with debouncing
+        let clickTimeout;
+        item.addEventListener('click', (e) => {
+            if (e.target.classList.contains('remove-entity-btn')) return;
             
-            entityList.appendChild(item);
+            // Prevent rapid clicks
+            if (clickTimeout) return;
+            
+            clickTimeout = setTimeout(() => {
+                window.wsManager.selectEntity(entity.id, !entity.selected, e.shiftKey);
+                clickTimeout = null;
+            }, 50);
+        });
+        
+        // Prevent flickering on hover
+        item.addEventListener('mouseenter', (e) => {
+            e.stopPropagation();
+        });
+        
+        item.addEventListener('mouseleave', (e) => {
+            e.stopPropagation();
+        });
+        
+        return item;
+    }
+    
+    updateEntityListItem(item, entity) {
+        // Update selection state without rebuilding
+        item.className = `entity-item ${entity.selected ? 'selected' : ''}`;
+        
+        // Update status color
+        const statusDiv = item.querySelector('.entity-status');
+        if (statusDiv) {
+            statusDiv.style.background = entity.color;
         }
     }
 
