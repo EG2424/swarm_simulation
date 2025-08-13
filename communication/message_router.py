@@ -27,6 +27,7 @@ class MessageRouter:
             "select_entity": self._handle_select_entity,
             "chat_message": self._handle_chat_message,
             "llm_request": self._handle_llm_request,
+            "toggle_kamikaze": self._handle_toggle_kamikaze,
         }
     
     async def handle_message(self, message: Dict[str, Any], simulation_engine) -> Optional[Dict[str, Any]]:
@@ -189,4 +190,43 @@ class MessageRouter:
             return {
                 "type": "error",
                 "data": {"message": f"LLM request error: {str(e)}"}
+            }
+    
+    async def _handle_toggle_kamikaze(self, data: Dict[str, Any], simulation_engine) -> Dict[str, Any]:
+        """Handle kamikaze toggle request"""
+        try:
+            entity_id = data.get("entity_id")
+            kamikaze_enabled = data.get("kamikaze_enabled", True)
+            
+            if entity_id not in simulation_engine.entities:
+                return {
+                    "type": "error",
+                    "data": {"message": "Entity not found"}
+                }
+            
+            entity = simulation_engine.entities[entity_id]
+            
+            # Only drones can have kamikaze toggled
+            if not hasattr(entity, 'kamikaze_enabled'):
+                return {
+                    "type": "error", 
+                    "data": {"message": "Entity does not support kamikaze"}
+                }
+            
+            entity.kamikaze_enabled = kamikaze_enabled
+            logger.info(f"Toggled kamikaze for {entity_id}: {kamikaze_enabled}")
+            
+            return {
+                "type": "kamikaze_toggled",
+                "data": {
+                    "entity_id": entity_id,
+                    "kamikaze_enabled": kamikaze_enabled
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Kamikaze toggle error: {e}")
+            return {
+                "type": "error",
+                "data": {"message": f"Kamikaze toggle error: {str(e)}"}
             }

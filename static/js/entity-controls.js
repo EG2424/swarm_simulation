@@ -6,7 +6,7 @@ class EntityControls {
     constructor() {
         this.selectedEntities = [];
         this.controlModes = {
-            drone: ['go_to', 'follow_tank', 'follow_teammate', 'random_search', 'patrol_route', 'hold_position'],
+            drone: ['go_to', 'follow_tank', 'follow_teammate', 'random_search', 'patrol_route', 'hold_position', 'kamikaze'],
             tank: ['go_to', 'patrol_route', 'hold_position', 'flee_to_cover', 'hide_and_ambush']
         };
         
@@ -100,7 +100,7 @@ class EntityControls {
             const currentEntityId = controlsDiv.dataset.currentEntity;
             if (currentEntityId === entity.id) {
                 // Only update status, not controls
-                statusDiv.innerHTML = `
+                let statusHTML = `
                     <div class="status-item">
                         <strong>Status:</strong> ${entity.status || 'unknown'}
                     </div>
@@ -114,6 +114,19 @@ class EntityControls {
                         <strong>Health:</strong> ${Math.round(entity.health * 100)}%
                     </div>
                 `;
+                
+                // Add kamikaze status for drones
+                if (entity.type === 'drone') {
+                    const kamikazeStatus = entity.kamikaze_enabled ? 'Enabled' : 'Disabled';
+                    const kamikazeClass = entity.kamikaze_enabled ? 'text-danger' : 'text-muted';
+                    statusHTML += `
+                        <div class="status-item">
+                            <strong>Kamikaze:</strong> <span class="${kamikazeClass}">${kamikazeStatus}</span>
+                        </div>
+                    `;
+                }
+                
+                statusDiv.innerHTML = statusHTML;
                 return;
             }
             
@@ -121,7 +134,7 @@ class EntityControls {
             controlsDiv.dataset.currentEntity = entity.id;
             
             // Show status
-            statusDiv.innerHTML = `
+            let statusHTML = `
                 <div class="status-item">
                     <strong>Status:</strong> ${entity.status || 'unknown'}
                 </div>
@@ -135,6 +148,19 @@ class EntityControls {
                     <strong>Health:</strong> ${Math.round(entity.health * 100)}%
                 </div>
             `;
+            
+            // Add kamikaze status for drones
+            if (entity.type === 'drone') {
+                const kamikazeStatus = entity.kamikaze_enabled ? 'Enabled' : 'Disabled';
+                const kamikazeClass = entity.kamikaze_enabled ? 'text-danger' : 'text-muted';
+                statusHTML += `
+                    <div class="status-item">
+                        <strong>Kamikaze:</strong> <span class="${kamikazeClass}">${kamikazeStatus}</span>
+                    </div>
+                `;
+            }
+            
+            statusDiv.innerHTML = statusHTML;
             
             // Show mode controls
             this.createModeControls(controlsDiv, entity);
@@ -183,6 +209,21 @@ class EntityControls {
                 <button class="control-btn" onclick="window.entityControls.stopEntity('${entity.id}')">Stop</button>
                 <button class="control-btn danger" onclick="window.entityControls.removeEntity('${entity.id}')">Remove</button>
             </div>
+            
+            ${entity.type === 'drone' ? `
+            <div class="control-section">
+                <div class="control-section-title">Kamikaze Control</div>
+                <div class="toggle-container">
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="kamikaze-toggle-${entity.id}" 
+                               ${entity.kamikaze_enabled ? 'checked' : ''} 
+                               onchange="window.entityControls.handleKamikazeToggle('${entity.id}', this.checked)">
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <span class="toggle-label">${entity.kamikaze_enabled ? 'Enabled' : 'Disabled'}</span>
+                </div>
+            </div>
+            ` : ''}
         `;
         
         // Add mode change handler with proper event handling
@@ -514,6 +555,38 @@ class EntityControls {
         };
         
         window.wsManager.commandEntity(entityId, command);
+    }
+
+    // Kamikaze control methods
+    handleKamikazeToggle(entityId, enabled) {
+        // Prevent multiple rapid calls
+        if (this.kamikazeToggleTimeout) {
+            clearTimeout(this.kamikazeToggleTimeout);
+        }
+        
+        this.kamikazeToggleTimeout = setTimeout(() => {
+            // Send kamikaze toggle command to server
+            window.wsManager.send({
+                type: 'toggle_kamikaze',
+                data: {
+                    entity_id: entityId,
+                    kamikaze_enabled: enabled
+                }
+            });
+            
+            // Update the toggle label immediately for better UX
+            const toggleLabel = document.querySelector(`#kamikaze-toggle-${entityId}`).parentNode.parentNode.querySelector('.toggle-label');
+            if (toggleLabel) {
+                toggleLabel.textContent = enabled ? 'Enabled' : 'Disabled';
+            }
+            
+            this.kamikazeToggleTimeout = null;
+        }, 100);
+    }
+    
+    toggleKamikaze(entityId, enabled) {
+        // Legacy method - redirect to new handler
+        this.handleKamikazeToggle(entityId, enabled);
     }
 }
 

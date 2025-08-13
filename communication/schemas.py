@@ -20,6 +20,7 @@ class DroneMode(str, Enum):
     RANDOM_SEARCH = "random_search"
     PATROL_ROUTE = "patrol_route"
     HOLD_POSITION = "hold_position"
+    KAMIKAZE = "kamikaze"
 
 
 class TankMode(str, Enum):

@@ -139,7 +139,7 @@ class Entity(ABC):
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert entity to dictionary for serialization"""
-        return {
+        base_dict = {
             "id": self.id,
             "type": self.type.value,
             "position": {"x": self.position.x, "y": self.position.y},
@@ -157,7 +157,18 @@ class Entity(ABC):
             "target_entity_id": self.target_entity_id,
             "patrol_route": [{"x": p.x, "y": p.y} for p in self.patrol_route],
             "current_waypoint": self.current_waypoint,
+            "mode": self.mode.value if hasattr(self.mode, 'value') else str(self.mode),
+            "status": getattr(self, 'status', 'unknown')
         }
+        
+        # Add drone-specific fields
+        if isinstance(self, Drone):
+            base_dict.update({
+                "kamikaze_enabled": getattr(self, 'kamikaze_enabled', True),
+                "kamikaze_target": getattr(self, 'kamikaze_target', None)
+            })
+            
+        return base_dict
 
 
 class Drone(Entity):
@@ -174,6 +185,10 @@ class Drone(Entity):
         self.search_target: Optional[Vector2D] = None
         self.search_timer = 0.0
         self.engage_timer = 0.0
+        
+        # Kamikaze settings
+        self.kamikaze_enabled = True  # Can be toggled via GUI
+        self.kamikaze_target: Optional[str] = None
         
     def _update_behavior(self, dt: float, entities: Dict[str, Entity]):
         """Update drone AI behavior"""
@@ -193,6 +208,8 @@ class Drone(Entity):
             self._behavior_patrol_route(dt)
         elif self.mode == DroneMode.HOLD_POSITION:
             self._behavior_hold_position(dt)
+        elif self.mode == DroneMode.KAMIKAZE:
+            self._behavior_kamikaze(dt, entities)
     
     def _behavior_go_to(self, dt: float):
         """Move to target position"""
@@ -253,8 +270,8 @@ class Drone(Entity):
                     self.status = "tracking"
                     self.engage_timer += dt
                     
-                    # Kamikaze after tracking for 2 seconds
-                    if self.engage_timer >= 2.0:
+                    # Kamikaze after tracking for 2 seconds (only if enabled)
+                    if self.engage_timer >= 2.0 and self.kamikaze_enabled:
                         self._engage_kamikaze(entity)
                         return
                     else:
@@ -300,6 +317,44 @@ class Drone(Entity):
         self.stop()
         self.status = "holding"
     
+    def _behavior_kamikaze(self, dt: float, entities: Dict[str, Entity]):
+        """Dedicated kamikaze mode - actively hunt for targets"""
+        # Find nearest tank to attack
+        nearest_tank = None
+        min_distance = float('inf')
+        
+        for entity in entities.values():
+            if isinstance(entity, Tank) and not entity.destroyed:
+                distance = self.distance_to(entity)
+                if distance < min_distance:
+                    min_distance = distance
+                    nearest_tank = entity
+        
+        if nearest_tank:
+            self.kamikaze_target = nearest_tank.id
+            self.status = "engaging"
+            
+            # Move directly toward target at max speed
+            self.move_towards(nearest_tank.position, self.physics.max_speed)
+            
+            # Engage kamikaze when very close
+            if min_distance <= 5.0:
+                self._engage_kamikaze(nearest_tank)
+                return
+                
+        else:
+            # No tanks found, search for them
+            self.status = "hunting"
+            if not self.search_target or self.distance_to_point(self.search_target) < 10.0:
+                # Pick new search location
+                self.search_target = Vector2D(
+                    x=random.uniform(50, 750),
+                    y=random.uniform(50, 550)
+                )
+            
+            if self.search_target:
+                self.move_towards(self.search_target)
+    
     def _engage_kamikaze(self, target: 'Tank'):
         """Engage kamikaze attack on target tank"""
         self.status = "engaging"
@@ -312,10 +367,16 @@ class Drone(Entity):
         """Update drone color based on status"""
         if self.destroyed:
             self.color = "#666666"  # Grey
-        elif self.status == "tracking" or self.status == "engaging":
-            self.color = "#FFFF00"  # Yellow - tracking
         elif self.status == "engaging":
-            self.color = "#FF0000"  # Red - kamikaze
+            self.color = "#FF0000"  # Red - engaging/kamikaze
+        elif self.status == "hunting":
+            self.color = "#FF6600"  # Orange - hunting for kamikaze
+        elif self.status == "tracking":
+            self.color = "#FFFF00"  # Yellow - tracking target
+        elif self.mode == DroneMode.KAMIKAZE and self.kamikaze_enabled:
+            self.color = "#FF3300"  # Dark red - kamikaze mode enabled
+        elif not self.kamikaze_enabled:
+            self.color = "#00CCFF"  # Cyan - kamikaze disabled
         else:
             self.color = "#00FF00"  # Green - idle/search
     
