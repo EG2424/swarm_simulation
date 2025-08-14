@@ -6,7 +6,7 @@ class EntityControls {
     constructor() {
         this.selectedEntities = [];
         this.controlModes = {
-            drone: ['follow_tank', 'follow_teammate', 'random_search', 'waypoint_mode', 'hold_position', 'kamikaze'],
+            drone: ['follow_tank', 'follow_teammate', 'random_search', 'waypoint_mode', 'hold_position'],
             tank: ['waypoint_mode', 'hold_position', 'flee_to_cover', 'hide_and_ambush']
         };
         
@@ -313,10 +313,8 @@ class EntityControls {
                         ${entity.current_waypoint !== undefined ? `(current: ${entity.current_waypoint})` : ''}
                     </div>
                     <div class="patrol-controls">
-                        <button class="control-btn" onclick="window.entityControls.addWaypoint('${entity.id}')">Add Waypoint</button>
                         <button class="control-btn" onclick="window.entityControls.clearRoute('${entity.id}')">Clear Route</button>
                     </div>
-                    <div class="help-text">Click on map to add waypoints</div>
                 `;
                 break;
                 
@@ -330,12 +328,50 @@ class EntityControls {
     }
 
     createMultiSelectionControls(container) {
+        // Analyze selected entity types for group-specific controls
+        const entityTypes = {};
+        let hasDrones = false;
+        let hasTanks = false;
+        
+        this.selectedEntities.forEach(entity => {
+            entityTypes[entity.type] = (entityTypes[entity.type] || 0) + 1;
+            if (entity.type === 'drone') hasDrones = true;
+            if (entity.type === 'tank') hasTanks = true;
+        });
+        
         container.innerHTML = `
             <div class="control-section">
-                <div class="control-section-title">Group Actions</div>
-                <button class="control-btn" onclick="window.entityControls.stopAllSelected()">Stop All</button>
-                <button class="control-btn" onclick="window.entityControls.formationMode()">Formation</button>
-                <button class="control-btn danger" onclick="window.entityControls.removeAllSelected()">Remove All</button>
+                <div class="control-section-title">Group Commands</div>
+                <div class="button-group">
+                    <button class="control-btn" onclick="window.entityControls.groupCommand('stop')">Stop All</button>
+                    <button class="control-btn" onclick="window.entityControls.groupCommand('hold')">Hold Position</button>
+                    <button class="control-btn" onclick="window.entityControls.groupCommand('search')">Search Mode</button>
+                </div>
+                
+                ${hasDrones ? `
+                <div class="button-group">
+                    <button class="control-btn" onclick="window.entityControls.toggleGroupKamikaze(true)">Enable Kamikaze</button>
+                    <button class="control-btn" onclick="window.entityControls.toggleGroupKamikaze(false)">Disable Kamikaze</button>
+                </div>
+                ` : ''}
+                
+                <div class="button-group">
+                    <button class="control-btn" onclick="window.entityControls.groupCommand('patrol')">Patrol Mode</button>
+                    <button class="control-btn" onclick="window.entityControls.clearAllRoutes()">Clear Routes</button>
+                </div>
+                
+                <div class="button-group">
+                    <button class="control-btn danger" onclick="window.entityControls.removeAllSelected()">Remove All</button>
+                </div>
+            </div>
+            
+            <div class="control-section">
+                <div class="control-section-title">Selection Info</div>
+                <div class="selection-stats">
+                    ${Object.entries(entityTypes).map(([type, count]) => 
+                        `<div>${count} ${type}${count > 1 ? 's' : ''}</div>`
+                    ).join('')}
+                </div>
             </div>
         `;
     }
@@ -426,32 +462,61 @@ class EntityControls {
 
     // Command methods
     changeEntityMode(entityId, newMode) {
-        const command = { mode: newMode };
-        window.wsManager.commandEntity(entityId, command);
-        
-        // Update the entity's mode locally for immediate UI update
-        const entity = this.selectedEntities.find(e => e.id === entityId);
-        if (entity) {
-            entity.mode = newMode;
-        }
-        
-        // Force immediate control rebuild by clearing the cached mode
-        const controlsDiv = document.getElementById('selection-controls');
-        if (controlsDiv) {
-            controlsDiv.dataset.currentMode = ''; // Clear cached mode to force rebuild
-        }
-        
-        // Update the control panel immediately
-        this.updateSelectionDetails();
-        
-        // Also directly update the mode-specific controls
-        setTimeout(() => {
-            const updatedEntity = this.selectedEntities.find(e => e.id === entityId);
-            if (updatedEntity) {
-                updatedEntity.mode = newMode; // Ensure mode is set
-                this.createModeSpecificControls(updatedEntity);
+        // Check if this is a single entity or group command
+        if (this.selectedEntities.length > 1) {
+            // Group command - apply to all selected entities
+            this.applyGroupModeChange(newMode);
+        } else {
+            // Single entity command
+            const command = { mode: newMode };
+            window.wsManager.commandEntity(entityId, command);
+            
+            // Update the entity's mode locally for immediate UI update
+            const entity = this.selectedEntities.find(e => e.id === entityId);
+            if (entity) {
+                entity.mode = newMode;
             }
-        }, 50);
+            
+            // Force immediate control rebuild by clearing the cached mode
+            const controlsDiv = document.getElementById('selection-controls');
+            if (controlsDiv) {
+                controlsDiv.dataset.currentMode = ''; // Clear cached mode to force rebuild
+            }
+            
+            // Update the control panel immediately
+            this.updateSelectionDetails();
+            
+            // Also directly update the mode-specific controls
+            setTimeout(() => {
+                const updatedEntity = this.selectedEntities.find(e => e.id === entityId);
+                if (updatedEntity) {
+                    updatedEntity.mode = newMode; // Ensure mode is set
+                    this.createModeSpecificControls(updatedEntity);
+                }
+            }, 50);
+        }
+    }
+    
+    applyGroupModeChange(newMode) {
+        // Apply mode change to all selected entities
+        for (const entity of this.selectedEntities) {
+            // Only apply if the mode is valid for this entity type
+            if (this.isModeValidForEntity(newMode, entity)) {
+                const command = { mode: newMode };
+                window.wsManager.commandEntity(entity.id, command);
+                
+                // Update locally
+                entity.mode = newMode;
+            }
+        }
+        
+        // Update UI
+        this.updateSelectionDetails();
+    }
+    
+    isModeValidForEntity(mode, entity) {
+        const validModes = this.controlModes[entity.type] || [];
+        return validModes.includes(mode);
     }
 
 
@@ -484,7 +549,7 @@ class EntityControls {
         }
     }
 
-    // Group commands
+    // Enhanced group commands for AoE3-style control
     groupCommand(action) {
         for (const entity of this.selectedEntities) {
             let command = {};
@@ -499,7 +564,55 @@ class EntityControls {
                 case 'hold':
                     command = { mode: 'hold_position' };
                     break;
+                case 'patrol':
+                    command = { mode: 'waypoint_mode' };
+                    break;
             }
+            
+            if (Object.keys(command).length > 0) {
+                window.wsManager.commandEntity(entity.id, command);
+            }
+        }
+    }
+    
+    // Apply waypoint command to all selected entities
+    applyGroupWaypoint(worldPos, isAppend) {
+        for (const entity of this.selectedEntities) {
+            if (entity.destroyed) continue;
+            
+            let command;
+            
+            if (isAppend && entity.patrol_route && entity.patrol_route.length > 0) {
+                // Append to existing route
+                const newRoute = [...entity.patrol_route, worldPos];
+                command = {
+                    mode: 'waypoint_mode',
+                    patrol_route: newRoute
+                };
+            } else {
+                // Replace with single waypoint
+                command = {
+                    mode: 'waypoint_mode',
+                    patrol_route: [worldPos]
+                };
+            }
+            
+            window.wsManager.commandEntity(entity.id, command);
+        }
+    }
+    
+    // Apply target assignment to group
+    applyGroupTarget(targetEntityId, mode) {
+        for (const entity of this.selectedEntities) {
+            if (entity.destroyed) continue;
+            
+            // Validate mode for entity type
+            if (!this.isModeValidForEntity(mode, entity)) continue;
+            
+            const command = {
+                mode: mode,
+                target_entity_id: targetEntityId
+            };
             
             window.wsManager.commandEntity(entity.id, command);
         }
@@ -579,12 +692,9 @@ class EntityControls {
             addBtn.style.backgroundColor = '#FF9F0A';
         }
         
-        // Add instruction overlay
-        this.showWaypointInstructions(true);
-        
-        // Initialize with first waypoint message
-        this.updateWaypointInstructions(0);
+        // Removed popup overlay - user can now click on map center
     }
+
 
     handleWaypointClick(worldPos) {
         if (!this.waypointMode || !this.waypointEntityId) return;
@@ -630,7 +740,6 @@ class EntityControls {
         }
         
         this.waypointEntityId = null;
-        this.showWaypointInstructions(false);
     }
 
     updateWaypointButton() {
@@ -646,51 +755,7 @@ class EntityControls {
             addBtn.textContent = `Added ${waypointCount} waypoint${waypointCount !== 1 ? 's' : ''} - Click for more...`;
         }
         
-        // Update instruction text
-        this.updateWaypointInstructions(waypointCount);
-    }
-
-    updateWaypointInstructions(waypointCount) {
-        const instructionDiv = document.getElementById('waypoint-instructions');
-        if (instructionDiv) {
-            const content = instructionDiv.querySelector('.instruction-content span');
-            if (content) {
-                if (waypointCount === 0) {
-                    content.textContent = 'Click on the map to add your first waypoint';
-                } else if (waypointCount === 1) {
-                    content.textContent = 'Click on the map to add another waypoint';
-                } else {
-                    content.textContent = `${waypointCount} waypoints added - Click to add more`;
-                }
-            }
-        }
-    }
-
-    showWaypointInstructions(show) {
-        let instructionDiv = document.getElementById('waypoint-instructions');
-        
-        if (show) {
-            if (!instructionDiv) {
-                instructionDiv = document.createElement('div');
-                instructionDiv.id = 'waypoint-instructions';
-                instructionDiv.className = 'waypoint-instructions';
-                instructionDiv.innerHTML = `
-                    <div class="instruction-content">
-                        <span>Click on the map to add a waypoint</span>
-                        <div class="instruction-buttons">
-                            <button onclick="window.entityControls.cancelWaypointMode()" class="done-btn">Done</button>
-                            <button onclick="window.entityControls.cancelWaypointMode()" class="cancel-btn">Cancel</button>
-                        </div>
-                    </div>
-                `;
-                document.body.appendChild(instructionDiv);
-            }
-            instructionDiv.style.display = 'block';
-        } else {
-            if (instructionDiv) {
-                instructionDiv.style.display = 'none';
-            }
-        }
+        // Popup overlay removed - map center now clickable
     }
 
     clearRoute(entityId) {
@@ -704,25 +769,42 @@ class EntityControls {
 
     // Kamikaze control methods
     handleKamikazeToggle(entityId, enabled) {
+        // Check if applying to group or single entity
+        const targetEntities = this.selectedEntities.length > 1 ? 
+            this.selectedEntities.filter(e => e.type === 'drone') : 
+            [this.selectedEntities.find(e => e.id === entityId)];
+        
         // Prevent multiple rapid calls
         if (this.kamikazeToggleTimeout) {
             clearTimeout(this.kamikazeToggleTimeout);
         }
         
         this.kamikazeToggleTimeout = setTimeout(() => {
-            // Send kamikaze toggle command to server
-            window.wsManager.send({
-                type: 'toggle_kamikaze',
-                data: {
-                    entity_id: entityId,
-                    kamikaze_enabled: enabled
+            // Apply to all target entities
+            for (const entity of targetEntities) {
+                if (entity && entity.type === 'drone') {
+                    // Send kamikaze toggle command to server
+                    window.wsManager.send({
+                        type: 'toggle_kamikaze',
+                        data: {
+                            entity_id: entity.id,
+                            kamikaze_enabled: enabled
+                        }
+                    });
+                    
+                    // Update local state
+                    entity.kamikaze_enabled = enabled;
                 }
-            });
+            }
             
-            // Update the toggle label immediately for better UX
-            const toggleLabel = document.querySelector(`#kamikaze-toggle-${entityId}`).parentNode.parentNode.querySelector('.toggle-label');
-            if (toggleLabel) {
-                toggleLabel.textContent = enabled ? 'Enabled' : 'Disabled';
+            // Update UI for all affected toggles
+            for (const entity of targetEntities) {
+                if (entity) {
+                    const toggleLabel = document.querySelector(`#kamikaze-toggle-${entity.id}`)?.parentNode?.parentNode?.querySelector('.toggle-label');
+                    if (toggleLabel) {
+                        toggleLabel.textContent = enabled ? 'Enabled' : 'Disabled';
+                    }
+                }
             }
             
             this.kamikazeToggleTimeout = null;
@@ -733,6 +815,58 @@ class EntityControls {
         // Legacy method - redirect to new handler
         this.handleKamikazeToggle(entityId, enabled);
     }
+    
+    // Additional group control methods for AoE3-style functionality
+    toggleGroupKamikaze(enabled) {
+        const droneEntities = this.selectedEntities.filter(e => e.type === 'drone');
+        
+        for (const drone of droneEntities) {
+            this.handleKamikazeToggle(drone.id, enabled);
+        }
+    }
+    
+    clearAllRoutes() {
+        for (const entity of this.selectedEntities) {
+            const command = {
+                mode: entity.mode || 'waypoint_mode',
+                patrol_route: []
+            };
+            window.wsManager.commandEntity(entity.id, command);
+        }
+    }
+    
+    // Enhanced formation control (placeholder for future implementation)
+    formationMode() {
+        if (this.selectedEntities.length < 2) {
+            console.log('Formation requires at least 2 units');
+            return;
+        }
+        
+        // Simple line formation for now
+        const leader = this.selectedEntities[0];
+        const spacing = 30;
+        
+        for (let i = 1; i < this.selectedEntities.length; i++) {
+            const entity = this.selectedEntities[i];
+            const offsetX = Math.cos(leader.heading) * spacing * i;
+            const offsetY = Math.sin(leader.heading) * spacing * i;
+            
+            const formationPos = {
+                x: leader.position.x + offsetX,
+                y: leader.position.y + offsetY
+            };
+            
+            const command = {
+                mode: 'waypoint_mode',
+                patrol_route: [formationPos]
+            };
+            
+            window.wsManager.commandEntity(entity.id, command);
+        }
+        
+        console.log(`Formation applied to ${this.selectedEntities.length} units`);
+    }
+    
 }
 
 // Global entity controls instance
