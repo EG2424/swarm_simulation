@@ -441,7 +441,7 @@ class Drone(Entity):
         elif mode == DroneMode.FOLLOW_TANK or mode == DroneMode.FOLLOW_TEAMMATE:
             self.target_entity_id = kwargs.get('target_entity_id')
         elif mode == DroneMode.PATROL_ROUTE:
-            self.patrol_route = kwargs.get('patrol_route', [])
+            self.patrol_route = kwargs.get('patrol_route', self.patrol_route)
             self.current_waypoint = 0
 
 

@@ -112,8 +112,9 @@ class EntityControls {
             
             // Check if this is the same entity as before
             const currentEntityId = controlsDiv.dataset.currentEntity;
-            if (currentEntityId === entity.id) {
-                // Only update status, not controls
+            const currentMode = controlsDiv.dataset.currentMode;
+            if (currentEntityId === entity.id && currentMode === entity.mode) {
+                // Only update status if both entity and mode are the same
                 let statusHTML = `
                     <div class="status-item">
                         <strong>Status:</strong> ${entity.status || 'unknown'}
@@ -144,8 +145,9 @@ class EntityControls {
                 return;
             }
             
-            // New entity selected, rebuild controls
+            // New entity selected or mode changed, rebuild controls
             controlsDiv.dataset.currentEntity = entity.id;
+            controlsDiv.dataset.currentMode = entity.mode;
             
             // Show status
             let statusHTML = `
@@ -181,6 +183,7 @@ class EntityControls {
             
         } else if (this.selectedEntities.length > 1) {
             controlsDiv.dataset.currentEntity = '';
+            controlsDiv.dataset.currentMode = '';
             
             // Multi-selection summary
             const types = {};
@@ -277,7 +280,10 @@ class EntityControls {
 
     createModeSpecificControls(entity) {
         const container = document.getElementById('mode-specific-controls');
-        if (!container) return;
+        if (!container) {
+            console.log(`[DEBUG] mode-specific-controls container not found!`);
+            return;
+        }
         
         const mode = entity.mode;
         console.log(`[DEBUG] Creating mode-specific controls for ${entity.type} in ${mode} mode`);
@@ -314,9 +320,9 @@ class EntityControls {
                 break;
                 
             case 'patrol_route':
-                console.log(`[DEBUG] Creating patrol_route controls for ${entity.type}`);
+                console.log(`[DEBUG] Creating patrol_route controls for ${entity.type}`, entity);
                 controlsHTML = `
-                    <div class="control-section-title">Patrol Route</div>
+                    <div class="control-section-title">Waypoint Mode</div>
                     <div class="patrol-info">
                         ${entity.patrol_route?.length || 0} waypoints
                         ${entity.current_waypoint !== undefined ? `(current: ${entity.current_waypoint})` : ''}
@@ -328,8 +334,15 @@ class EntityControls {
                     <div class="help-text">Click on map to add waypoints</div>
                 `;
                 break;
+                
+            default:
+                // For all other modes (random_search, hold_position, kamikaze, etc.), show no controls
+                console.log(`[DEBUG] Mode ${mode} has no specific controls - clearing`);
+                controlsHTML = '';
+                break;
         }
         
+        console.log(`[DEBUG] Setting mode-specific controls HTML:`, controlsHTML);
         container.innerHTML = controlsHTML;
     }
 
@@ -412,6 +425,9 @@ class EntityControls {
     }
 
     formatModeName(mode) {
+        if (mode === 'patrol_route') {
+            return 'Waypoint Mode';
+        }
         return mode.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
     }
 
@@ -431,11 +447,33 @@ class EntityControls {
         const command = { mode: newMode };
         window.wsManager.commandEntity(entityId, command);
         
-        // Update the control panel after mode change to show new controls
+        // Update the entity's mode locally for immediate UI update
+        const entity = this.selectedEntities.find(e => e.id === entityId);
+        if (entity) {
+            entity.mode = newMode;
+            console.log(`[DEBUG] Updated entity mode locally to ${newMode}`);
+        }
+        
+        // Force immediate control rebuild by clearing the cached mode
+        const controlsDiv = document.getElementById('selection-controls');
+        if (controlsDiv) {
+            controlsDiv.dataset.currentMode = ''; // Clear cached mode to force rebuild
+            console.log(`[DEBUG] Cleared cached mode, forcing rebuild`);
+        }
+        
+        // Update the control panel immediately
+        console.log(`[DEBUG] Updating control panel after mode change to ${newMode}`);
+        this.updateSelectionDetails();
+        
+        // Also directly update the mode-specific controls
         setTimeout(() => {
-            console.log(`[DEBUG] Updating control panel after mode change to ${newMode}`);
-            this.updateControlPanel();
-        }, 100);
+            console.log(`[DEBUG] Direct mode-specific control update for ${newMode}`);
+            const updatedEntity = this.selectedEntities.find(e => e.id === entityId);
+            if (updatedEntity) {
+                updatedEntity.mode = newMode; // Ensure mode is set
+                this.createModeSpecificControls(updatedEntity);
+            }
+        }, 50);
     }
 
     setTargetPosition(entityId) {
