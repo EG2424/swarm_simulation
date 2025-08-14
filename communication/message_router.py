@@ -71,6 +71,11 @@ class MessageRouter:
         try:
             request = SimulationControlRequest(**data)
             result = simulation_engine.handle_control_command(request)
+            
+            # Special handling for reset command - mark for broadcasting
+            if request.action == "reset" and "broadcast_state" in result:
+                result["should_broadcast"] = True
+            
             return {
                 "type": "control_response",
                 "data": result

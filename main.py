@@ -108,6 +108,13 @@ async def websocket_endpoint(websocket: WebSocket):
             response = await message_router.handle_message(message, simulation_engine)
             
             if response:
+                # Check if this response should be broadcasted (e.g., reset command)
+                if response.get("data", {}).get("should_broadcast") and response.get("data", {}).get("broadcast_state"):
+                    await connection_manager.broadcast(json.dumps({
+                        "type": "simulation_update", 
+                        "data": response["data"]["broadcast_state"]
+                    }))
+                
                 await connection_manager.send_personal_message(
                     json.dumps(response), websocket
                 )
