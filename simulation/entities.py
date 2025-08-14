@@ -220,33 +220,19 @@ class Drone(Entity):
             self.stop()
             return
             
-        if self.mode == DroneMode.GO_TO:
-            self._behavior_go_to(dt)
-        elif self.mode == DroneMode.FOLLOW_TANK:
+        if self.mode == DroneMode.FOLLOW_TANK:
             self._behavior_follow_tank(dt, entities)
         elif self.mode == DroneMode.FOLLOW_TEAMMATE:
             self._behavior_follow_teammate(dt, entities)
         elif self.mode == DroneMode.RANDOM_SEARCH:
             self._behavior_random_search(dt, entities)
-        elif self.mode == DroneMode.PATROL_ROUTE:
-            self._behavior_patrol_route(dt)
+        elif self.mode == DroneMode.WAYPOINT_MODE or self.mode == "patrol_route":
+            self._behavior_waypoint_mode(dt)
         elif self.mode == DroneMode.HOLD_POSITION:
             self._behavior_hold_position(dt)
         elif self.mode == DroneMode.KAMIKAZE:
             self._behavior_kamikaze(dt, entities)
     
-    def _behavior_go_to(self, dt: float):
-        """Move to target position"""
-        if self.target_position:
-            if self.distance_to_point(self.target_position) > 2.0:
-                self.move_towards(self.target_position)
-                self.status = "moving"
-            else:
-                self.stop()
-                self.status = "idle"
-        else:
-            self.stop()
-            self.status = "idle"
     
     def _behavior_follow_tank(self, dt: float, entities: Dict[str, Entity]):
         """Follow specific tank"""
@@ -323,8 +309,8 @@ class Drone(Entity):
             else:
                 self.search_target = None
     
-    def _behavior_patrol_route(self, dt: float):
-        """Patrol along defined route"""
+    def _behavior_waypoint_mode(self, dt: float):
+        """Move along defined waypoint route"""
         if not self.patrol_route:
             self.stop()
             return
@@ -436,12 +422,13 @@ class Drone(Entity):
         """Set drone mode and parameters"""
         self.mode = mode
         
-        if mode == DroneMode.GO_TO:
-            self.target_position = kwargs.get('target_position')
-        elif mode == DroneMode.FOLLOW_TANK or mode == DroneMode.FOLLOW_TEAMMATE:
+        if mode == DroneMode.FOLLOW_TANK or mode == DroneMode.FOLLOW_TEAMMATE:
             self.target_entity_id = kwargs.get('target_entity_id')
-        elif mode == DroneMode.PATROL_ROUTE:
-            self.patrol_route = kwargs.get('patrol_route', self.patrol_route)
+        elif mode == DroneMode.WAYPOINT_MODE or mode == "patrol_route":
+            # Support both new and old parameter names for backward compatibility
+            waypoint_route = kwargs.get('waypoint_route') or kwargs.get('patrol_route')
+            if waypoint_route is not None:
+                self.patrol_route = waypoint_route
             self.current_waypoint = 0
 
 
@@ -450,7 +437,7 @@ class Tank(Entity):
     
     def __init__(self, entity_id: str, x: float, y: float, heading: float = 0.0):
         super().__init__(entity_id, EntityType.TANK, x, y, heading)
-        self.mode = TankMode.PATROL_ROUTE
+        self.mode = TankMode.WAYPOINT_MODE
         self.status = "idle"  # idle, moving, engaging, destroyed
         self.physics.max_speed = 3.0
         self.physics.detection_radius = 30.0
@@ -484,10 +471,8 @@ class Tank(Entity):
                     self.detected_by_drone = True
                     break
         
-        if self.mode == TankMode.GO_TO:
-            self._behavior_go_to(dt)
-        elif self.mode == TankMode.PATROL_ROUTE:
-            self._behavior_patrol_route(dt, entities)
+        if self.mode == TankMode.WAYPOINT_MODE or self.mode == "patrol_route":
+            self._behavior_waypoint_mode(dt, entities)
         elif self.mode == TankMode.HOLD_POSITION:
             self._behavior_hold_position(dt)
         elif self.mode == TankMode.FLEE_TO_COVER:
@@ -495,21 +480,9 @@ class Tank(Entity):
         elif self.mode == TankMode.HIDE_AND_AMBUSH:
             self._behavior_hide_and_ambush(dt, entities)
     
-    def _behavior_go_to(self, dt: float):
-        """Move to target position"""
-        if self.target_position:
-            if self.distance_to_point(self.target_position) > 2.0:
-                self.move_towards(self.target_position, self.physics.max_speed * 0.8)
-                self.status = "moving"
-            else:
-                self.stop()
-                self.status = "idle"
-        else:
-            self.stop()
-            self.status = "idle"
     
-    def _behavior_patrol_route(self, dt: float, entities: Dict[str, Entity]):
-        """Patrol along route, with drone avoidance"""
+    def _behavior_waypoint_mode(self, dt: float, entities: Dict[str, Entity]):
+        """Move along waypoint route, with drone avoidance"""
         if self.detected_by_drone:
             # Flee behavior when detected
             self._flee_from_drones(entities)
@@ -590,8 +563,9 @@ class Tank(Entity):
         """Set tank mode and parameters"""
         self.mode = mode
         
-        if mode == TankMode.GO_TO:
-            self.target_position = kwargs.get('target_position')
-        elif mode == TankMode.PATROL_ROUTE:
-            self.patrol_route = kwargs.get('patrol_route', self.patrol_route)
+        if mode == TankMode.WAYPOINT_MODE or mode == "patrol_route":
+            # Support both new and old parameter names for backward compatibility
+            waypoint_route = kwargs.get('waypoint_route') or kwargs.get('patrol_route')
+            if waypoint_route is not None:
+                self.patrol_route = waypoint_route
             self.current_waypoint = 0

@@ -14,18 +14,16 @@ class EntityType(str, Enum):
 
 
 class DroneMode(str, Enum):
-    GO_TO = "go_to"
     FOLLOW_TANK = "follow_tank"
     FOLLOW_TEAMMATE = "follow_teammate"
     RANDOM_SEARCH = "random_search"
-    PATROL_ROUTE = "patrol_route"
+    WAYPOINT_MODE = "waypoint_mode"
     HOLD_POSITION = "hold_position"
     KAMIKAZE = "kamikaze"
 
 
 class TankMode(str, Enum):
-    GO_TO = "go_to"
-    PATROL_ROUTE = "patrol_route"
+    WAYPOINT_MODE = "waypoint_mode"
     HOLD_POSITION = "hold_position"
     FLEE_TO_COVER = "flee_to_cover"
     HIDE_AND_AMBUSH = "hide_and_ambush"

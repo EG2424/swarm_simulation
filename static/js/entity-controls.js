@@ -6,8 +6,8 @@ class EntityControls {
     constructor() {
         this.selectedEntities = [];
         this.controlModes = {
-            drone: ['go_to', 'follow_tank', 'follow_teammate', 'random_search', 'patrol_route', 'hold_position', 'kamikaze'],
-            tank: ['go_to', 'patrol_route', 'hold_position', 'flee_to_cover', 'hide_and_ambush']
+            drone: ['follow_tank', 'follow_teammate', 'random_search', 'waypoint_mode', 'hold_position', 'kamikaze'],
+            tank: ['waypoint_mode', 'hold_position', 'flee_to_cover', 'hide_and_ambush']
         };
         
         // Waypoint selection state
@@ -280,27 +280,12 @@ class EntityControls {
 
     createModeSpecificControls(entity) {
         const container = document.getElementById('mode-specific-controls');
-        if (!container) {
-            console.log(`[DEBUG] mode-specific-controls container not found!`);
-            return;
-        }
+        if (!container) return;
         
         const mode = entity.mode;
-        console.log(`[DEBUG] Creating mode-specific controls for ${entity.type} in ${mode} mode`);
         let controlsHTML = '';
         
         switch (mode) {
-            case 'go_to':
-                controlsHTML = `
-                    <div class="control-section-title">Target Position</div>
-                    <div class="position-input">
-                        <input type="number" id="target-x" placeholder="X" value="${entity.target_position?.x || ''}" style="width: 60px;">
-                        <input type="number" id="target-y" placeholder="Y" value="${entity.target_position?.y || ''}" style="width: 60px;">
-                        <button class="control-btn" onclick="window.entityControls.setTargetPosition('${entity.id}')">Set</button>
-                    </div>
-                    <div class="help-text">Click on map or enter coordinates</div>
-                `;
-                break;
                 
             case 'follow_tank':
             case 'follow_teammate':
@@ -319,8 +304,8 @@ class EntityControls {
                 `;
                 break;
                 
+            case 'waypoint_mode':
             case 'patrol_route':
-                console.log(`[DEBUG] Creating patrol_route controls for ${entity.type}`, entity);
                 controlsHTML = `
                     <div class="control-section-title">Waypoint Mode</div>
                     <div class="patrol-info">
@@ -337,12 +322,10 @@ class EntityControls {
                 
             default:
                 // For all other modes (random_search, hold_position, kamikaze, etc.), show no controls
-                console.log(`[DEBUG] Mode ${mode} has no specific controls - clearing`);
                 controlsHTML = '';
                 break;
         }
         
-        console.log(`[DEBUG] Setting mode-specific controls HTML:`, controlsHTML);
         container.innerHTML = controlsHTML;
     }
 
@@ -425,7 +408,7 @@ class EntityControls {
     }
 
     formatModeName(mode) {
-        if (mode === 'patrol_route') {
+        if (mode === 'waypoint_mode' || mode === 'patrol_route') {
             return 'Waypoint Mode';
         }
         return mode.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
@@ -443,7 +426,6 @@ class EntityControls {
 
     // Command methods
     changeEntityMode(entityId, newMode) {
-        console.log(`[DEBUG] Changing entity ${entityId} mode to ${newMode}`);
         const command = { mode: newMode };
         window.wsManager.commandEntity(entityId, command);
         
@@ -451,23 +433,19 @@ class EntityControls {
         const entity = this.selectedEntities.find(e => e.id === entityId);
         if (entity) {
             entity.mode = newMode;
-            console.log(`[DEBUG] Updated entity mode locally to ${newMode}`);
         }
         
         // Force immediate control rebuild by clearing the cached mode
         const controlsDiv = document.getElementById('selection-controls');
         if (controlsDiv) {
             controlsDiv.dataset.currentMode = ''; // Clear cached mode to force rebuild
-            console.log(`[DEBUG] Cleared cached mode, forcing rebuild`);
         }
         
         // Update the control panel immediately
-        console.log(`[DEBUG] Updating control panel after mode change to ${newMode}`);
         this.updateSelectionDetails();
         
         // Also directly update the mode-specific controls
         setTimeout(() => {
-            console.log(`[DEBUG] Direct mode-specific control update for ${newMode}`);
             const updatedEntity = this.selectedEntities.find(e => e.id === entityId);
             if (updatedEntity) {
                 updatedEntity.mode = newMode; // Ensure mode is set
@@ -476,22 +454,6 @@ class EntityControls {
         }, 50);
     }
 
-    setTargetPosition(entityId) {
-        const targetX = parseFloat(document.getElementById('target-x').value);
-        const targetY = parseFloat(document.getElementById('target-y').value);
-        
-        if (isNaN(targetX) || isNaN(targetY)) {
-            alert('Please enter valid coordinates');
-            return;
-        }
-        
-        const command = {
-            mode: 'go_to',
-            target_position: { x: targetX, y: targetY }
-        };
-        
-        window.wsManager.commandEntity(entityId, command);
-    }
 
     setTargetEntity(entityId) {
         const targetId = document.getElementById('target-entity-select').value;
@@ -532,7 +494,7 @@ class EntityControls {
                     command = { mode: 'hold_position' };
                     break;
                 case 'search':
-                    command = { mode: entity.type === 'drone' ? 'random_search' : 'patrol_route' };
+                    command = { mode: entity.type === 'drone' ? 'random_search' : 'waypoint_mode' };
                     break;
                 case 'hold':
                     command = { mode: 'hold_position' };
@@ -592,8 +554,8 @@ class EntityControls {
         const targetY = entity.position.y + dy * 10;
         
         const command = {
-            mode: 'go_to',
-            target_position: { x: targetX, y: targetY }
+            mode: 'waypoint_mode',
+            patrol_route: [{ x: targetX, y: targetY }]
         };
         
         window.wsManager.commandEntity(entity.id, command);
@@ -640,7 +602,7 @@ class EntityControls {
         
         // Send command to update patrol route
         const command = {
-            mode: 'patrol_route',
+            mode: 'waypoint_mode',
             patrol_route: newRoute
         };
         
@@ -733,7 +695,7 @@ class EntityControls {
 
     clearRoute(entityId) {
         const command = {
-            mode: 'patrol_route',
+            mode: 'waypoint_mode',
             patrol_route: []
         };
         

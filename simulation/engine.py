@@ -486,7 +486,7 @@ class SimulationEngine:
                 tank1_request = SpawnEntityRequest(
                     type=EntityType.TANK,
                     position=Vector2D(x=100, y=100),  # Safe open area
-                    mode=TankMode.PATROL_ROUTE
+                    mode=TankMode.WAYPOINT_MODE
                 )
                 tank1 = self.spawn_entity(tank1_request)
                 # Set patrol route after spawning
