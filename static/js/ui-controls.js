@@ -8,6 +8,7 @@ class UIControls {
         this.speedMultiplier = 1.0;
         this.zoom = 1.0;
         this.entityScale = 1.0;
+        this.pauseButtonDebounce = false;
         
         this.setupEventListeners();
         this.setupWebSocketHandlers();
@@ -20,7 +21,21 @@ class UIControls {
         });
 
         document.getElementById('pause-btn').addEventListener('click', () => {
-            this.controlSimulation('pause');
+            // Prevent multiple rapid clicks
+            if (this.pauseButtonDebounce) return;
+            this.pauseButtonDebounce = true;
+            setTimeout(() => { this.pauseButtonDebounce = false; }, 500);
+            
+            console.log(`Pause button clicked, current state: ${this.simulationState}`);
+            
+            // Toggle between pause and start
+            if (this.simulationState === 'running') {
+                console.log('Sending pause command');
+                this.controlSimulation('pause');
+            } else if (this.simulationState === 'paused') {
+                console.log('Sending start command');
+                this.controlSimulation('start');
+            }
         });
 
         document.getElementById('reset-btn').addEventListener('click', () => {
@@ -63,6 +78,13 @@ class UIControls {
             }
         });
 
+        // Detection ranges toggle
+        document.getElementById('show-detection-ranges').addEventListener('change', (e) => {
+            if (window.renderer) {
+                window.renderer.setShowDetectionRanges(e.target.checked);
+            }
+        });
+
         // Entity spawn controls
         document.getElementById('add-drone-btn').addEventListener('click', () => {
             this.spawnEntityAtRandomLocation('drone');
@@ -82,15 +104,19 @@ class UIControls {
 
         // Filter controls
         document.getElementById('filter-drones').addEventListener('change', () => {
-            this.updateEntityList();
+            this.updateEntityList(window.renderer?.entities || []);
         });
 
         document.getElementById('filter-tanks').addEventListener('change', () => {
-            this.updateEntityList();
+            this.updateEntityList(window.renderer?.entities || []);
         });
 
         document.getElementById('filter-destroyed').addEventListener('change', () => {
-            this.updateEntityList();
+            const entities = window.renderer?.entities || [];
+            const destroyedCount = entities.filter(e => e.destroyed).length;
+            console.log(`Destroyed filter toggled. Total entities: ${entities.length}, Destroyed: ${destroyedCount}`);
+            console.log('Destroyed entities:', entities.filter(e => e.destroyed));
+            this.updateEntityList(entities);
         });
 
         // Tab controls
@@ -148,6 +174,23 @@ class UIControls {
             this.handleEntitySelectionChanged(data);
         });
 
+        window.wsManager.on('simulation_update', (data) => {
+            // Sync UI state with server state
+            if (data.state) {
+                this.simulationState = data.state;
+                this.updateSimulationStatusDisplay();
+            }
+        });
+
+        window.wsManager.on('control_response', (data) => {
+            // Update UI state based on server confirmation
+            if (data.state) {
+                this.simulationState = data.state;
+                this.updateSimulationStatusDisplay();
+                console.log(`Server confirmed state change to: ${data.state}`);
+            }
+        });
+
         // Connection events
         window.addEventListener('ws-connected', () => {
             this.onWebSocketConnected();
@@ -159,17 +202,9 @@ class UIControls {
     }
 
     controlSimulation(action, speedMultiplier = null) {
-        if (window.wsManager.controlSimulation(action, speedMultiplier)) {
-            // Update UI immediately for responsiveness
-            if (action === 'start') {
-                this.simulationState = 'running';
-            } else if (action === 'pause') {
-                this.simulationState = 'paused';
-            } else if (action === 'reset') {
-                this.simulationState = 'stopped';
-            }
-            this.updateSimulationStatusDisplay();
-        }
+        // Send command to server and wait for confirmation
+        // Don't update UI state immediately - wait for server response
+        window.wsManager.controlSimulation(action, speedMultiplier);
     }
 
     spawnEntityAtRandomLocation(type, mode = null) {
@@ -229,9 +264,15 @@ class UIControls {
         if (this.simulationState === 'running') {
             startBtn.disabled = true;
             pauseBtn.disabled = false;
+            pauseBtn.textContent = 'Pause';
+        } else if (this.simulationState === 'paused') {
+            startBtn.disabled = false;
+            pauseBtn.disabled = false;
+            pauseBtn.textContent = 'Resume';
         } else {
             startBtn.disabled = false;
             pauseBtn.disabled = true;
+            pauseBtn.textContent = 'Pause';
         }
     }
 
@@ -248,13 +289,29 @@ class UIControls {
         const showTanks = document.getElementById('filter-tanks').checked;
         const showDestroyed = document.getElementById('filter-destroyed').checked;
         
+        console.log(`updateEntityList: entities=${entities.length}, showDrones=${showDrones}, showTanks=${showTanks}, showDestroyed=${showDestroyed}`);
+        
         // Filter entities first
         const filteredEntities = entities.filter(entity => {
+            // If showing destroyed, show all destroyed entities regardless of type
+            if (showDestroyed && entity.destroyed) {
+                return true;
+            }
+            
+            // If not showing destroyed, filter out destroyed entities
+            if (entity.destroyed && !showDestroyed) {
+                return false;
+            }
+            
+            // For non-destroyed entities, apply type filters
             if (entity.type === 'drone' && !showDrones) return false;
             if (entity.type === 'tank' && !showTanks) return false;
-            if (entity.destroyed && !showDestroyed) return false;
+            
             return true;
         });
+        
+        console.log(`Filtered ${entities.length} entities down to ${filteredEntities.length}`);
+        console.log('Filtered entities:', filteredEntities.map(e => `${e.type}-${e.id.substring(0,8)} (destroyed: ${e.destroyed})`));
         
         // Check if the list actually needs updating
         const currentItems = entityList.querySelectorAll('.entity-item');

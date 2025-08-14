@@ -19,7 +19,7 @@ class CanvasRenderer {
         
         // Rendering settings
         this.entityScale = 1.0;
-        this.showDetectionRanges = true;
+        this.showDetectionRanges = false;
         this.showPatrolRoutes = false;  // Disabled to fix rendering bug
         this.showSelectionOutlines = true;
         
@@ -117,6 +117,10 @@ class CanvasRenderer {
         this.entityScale = Math.max(0.1, Math.min(5.0, scale));
     }
 
+    setShowDetectionRanges(show) {
+        this.showDetectionRanges = show;
+    }
+
     centerViewport(worldX, worldY) {
         this.viewport.x = worldX - this.viewport.width / (2 * this.viewport.zoom);
         this.viewport.y = worldY - this.viewport.height / (2 * this.viewport.zoom);
@@ -191,8 +195,8 @@ class CanvasRenderer {
             this.ctx.rotate(entity.heading);
         }
         
-        // Draw detection range (if enabled and entity is selected)
-        if (this.showDetectionRanges && isSelected && !entity.destroyed) {
+        // Draw detection range (if enabled and entity is selected, or if showing all detection ranges for drones)
+        if (this.showDetectionRanges && !entity.destroyed && (isSelected || entity.type === 'drone')) {
             this.drawDetectionRange(entity, scale);
         }
         
