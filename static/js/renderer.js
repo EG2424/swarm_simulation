@@ -22,6 +22,7 @@ class CanvasRenderer {
         this.showDetectionRanges = false;
         this.showPatrolRoutes = false;  // Disabled to fix rendering bug
         this.showSelectionOutlines = true;
+        this.showTerrain = true;
         
         // Colors
         this.colors = {
@@ -37,6 +38,7 @@ class CanvasRenderer {
         // Cached rendering data
         this.entities = [];
         this.selectedEntityIds = [];
+        this.terrain = null;
         
         this.setupCanvas();
         this.setupEventListeners();
@@ -121,6 +123,10 @@ class CanvasRenderer {
         this.showDetectionRanges = show;
     }
 
+    setShowTerrain(show) {
+        this.showTerrain = show;
+    }
+
     centerViewport(worldX, worldY) {
         this.viewport.x = worldX - this.viewport.width / (2 * this.viewport.zoom);
         this.viewport.y = worldY - this.viewport.height / (2 * this.viewport.zoom);
@@ -131,6 +137,11 @@ class CanvasRenderer {
         this.selectedEntityIds = selectedEntityIds || [];
     }
 
+    updateTerrain(terrain) {
+        console.log('Updating terrain data:', terrain);
+        this.terrain = terrain;
+    }
+
     render() {
         // Clear canvas
         this.ctx.fillStyle = this.colors.background;
@@ -138,6 +149,11 @@ class CanvasRenderer {
         
         // Draw grid
         this.drawGrid();
+        
+        // Draw terrain
+        if (this.showTerrain && this.terrain) {
+            this.drawTerrain();
+        }
         
         // Draw entities
         for (const entity of this.entities) {
@@ -510,6 +526,120 @@ class CanvasRenderer {
         
         // Update cursor
         this.canvas.style.cursor = hoveredEntity ? 'pointer' : 'crosshair';
+    }
+
+    drawTerrain() {
+        if (!this.terrain || !this.terrain.grid) {
+            console.log('No terrain data to render:', this.terrain);
+            return;
+        }
+        console.log('Drawing terrain with', this.terrain.grid_width, 'x', this.terrain.grid_height, 'cells');
+
+        const terrain = this.terrain;
+        const cellSize = terrain.cell_size * this.viewport.zoom;
+        const startX = -this.viewport.x * this.viewport.zoom;
+        const startY = -this.viewport.y * this.viewport.zoom;
+
+        // Only render visible cells for performance
+        const startGridX = Math.max(0, Math.floor(-startX / cellSize));
+        const startGridY = Math.max(0, Math.floor(-startY / cellSize));
+        const endGridX = Math.min(terrain.grid_width, Math.ceil((this.viewport.width - startX) / cellSize));
+        const endGridY = Math.min(terrain.grid_height, Math.ceil((this.viewport.height - startY) / cellSize));
+
+        // Draw terrain cells
+        for (let gy = startGridY; gy < endGridY; gy++) {
+            for (let gx = startGridX; gx < endGridX; gx++) {
+                if (gy < terrain.grid.length && gx < terrain.grid[gy].length) {
+                    const terrainType = terrain.grid[gy][gx];
+                    const terrainDef = terrain.terrain_definitions[terrainType];
+                    
+                    if (terrainDef && terrainType !== 'open') { // Don't draw open terrain (default background)
+                        const x = startX + gx * cellSize;
+                        const y = startY + gy * cellSize;
+                        
+                        // Set terrain color
+                        this.ctx.fillStyle = terrainDef.color;
+                        this.ctx.fillRect(x, y, cellSize, cellSize);
+                        
+                        // Add simple patterns based on terrain type
+                        if (this.viewport.zoom > 0.5) { // Only show patterns at higher zoom
+                            this.drawTerrainPattern(x, y, cellSize, terrainType);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    drawTerrainPattern(x, y, size, terrainType) {
+        this.ctx.save();
+        
+        switch (terrainType) {
+            case 'forest':
+                // Draw simple dots for trees
+                this.ctx.fillStyle = '#1a3d1a';
+                const dotSize = Math.max(2, size * 0.1);
+                for (let i = 0; i < 3; i++) {
+                    for (let j = 0; j < 3; j++) {
+                        const dotX = x + (i + 0.5) * (size / 3);
+                        const dotY = y + (j + 0.5) * (size / 3);
+                        this.ctx.beginPath();
+                        this.ctx.arc(dotX, dotY, dotSize, 0, 2 * Math.PI);
+                        this.ctx.fill();
+                    }
+                }
+                break;
+                
+            case 'road':
+                // Draw road stripes
+                this.ctx.strokeStyle = '#ffffff';
+                this.ctx.lineWidth = Math.max(1, size * 0.05);
+                this.ctx.beginPath();
+                this.ctx.moveTo(x, y + size * 0.5);
+                this.ctx.lineTo(x + size, y + size * 0.5);
+                this.ctx.stroke();
+                break;
+                
+            case 'water':
+                // Draw wave pattern
+                this.ctx.strokeStyle = '#4a7bc8';
+                this.ctx.lineWidth = Math.max(1, size * 0.03);
+                for (let i = 0; i < 3; i++) {
+                    this.ctx.beginPath();
+                    const waveY = y + (i + 1) * (size / 4);
+                    this.ctx.moveTo(x, waveY);
+                    this.ctx.quadraticCurveTo(x + size * 0.25, waveY - size * 0.1, x + size * 0.5, waveY);
+                    this.ctx.quadraticCurveTo(x + size * 0.75, waveY + size * 0.1, x + size, waveY);
+                    this.ctx.stroke();
+                }
+                break;
+                
+            case 'ruins':
+                // Draw rubble pattern
+                this.ctx.fillStyle = '#5a3626';
+                for (let i = 0; i < 4; i++) {
+                    const rubbleX = x + Math.random() * size;
+                    const rubbleY = y + Math.random() * size;
+                    const rubbleSize = Math.max(1, size * 0.08);
+                    this.ctx.fillRect(rubbleX, rubbleY, rubbleSize, rubbleSize);
+                }
+                break;
+                
+            case 'minefield':
+                // Draw hazard stripes
+                this.ctx.strokeStyle = '#cc9900';
+                this.ctx.lineWidth = Math.max(1, size * 0.03);
+                for (let i = 0; i < 4; i++) {
+                    this.ctx.beginPath();
+                    const stripePos = i * (size / 4);
+                    this.ctx.moveTo(x + stripePos, y);
+                    this.ctx.lineTo(x + stripePos + size * 0.5, y + size);
+                    this.ctx.stroke();
+                }
+                break;
+        }
+        
+        this.ctx.restore();
     }
 }
 

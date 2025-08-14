@@ -142,8 +142,12 @@ class LLMSwarmApp {
     }
 
     populateScenarioSelector(scenarios) {
+        console.log('Populating scenario selector with scenarios:', scenarios);
         const select = document.getElementById('scenario-select');
-        if (!select) return;
+        if (!select) {
+            console.error('Scenario select element not found!');
+            return;
+        }
         
         // Clear existing options (except the first one)
         while (select.children.length > 1) {
@@ -152,6 +156,7 @@ class LLMSwarmApp {
         
         // Add scenario options
         for (const scenario of scenarios) {
+            console.log('Adding scenario option:', scenario);
             const option = document.createElement('option');
             option.value = scenario.name;
             option.textContent = scenario.title || scenario.name;

@@ -52,7 +52,7 @@ class Entity(ABC):
         # Timing
         self.last_update = time.time()
         
-    def update(self, dt: float, arena_bounds: Tuple[float, float], entities: Dict[str, 'Entity']):
+    def update(self, dt: float, arena_bounds: Tuple[float, float], entities: Dict[str, 'Entity'], terrain=None):
         """Update entity state with fixed timestep"""
         current_time = time.time()
         
@@ -60,14 +60,14 @@ class Entity(ABC):
         self._update_behavior(dt, entities)
         
         # Apply physics
-        self._update_physics(dt, arena_bounds)
+        self._update_physics(dt, arena_bounds, terrain)
         
         # Update visual state
         self._update_visual_state()
         
         self.last_update = current_time
     
-    def _update_physics(self, dt: float, arena_bounds: Tuple[float, float]):
+    def _update_physics(self, dt: float, arena_bounds: Tuple[float, float], terrain=None):
         """Apply unicycle kinematics and constraints"""
         # Skip physics updates for destroyed entities
         if self.destroyed:
@@ -77,9 +77,19 @@ class Entity(ABC):
         speed = math.sqrt(self.velocity.x**2 + self.velocity.y**2)
         
         if speed > 0:
+            # Apply terrain movement cost
+            effective_dt = dt
+            if terrain:
+                move_cost = terrain.get_movement_cost(self.position.x, self.position.y, self.type.value)
+                effective_dt = dt / move_cost  # Higher cost = slower movement
+                
+                # Check if blocked
+                if terrain.is_blocked(self.position.x, self.position.y, self.type.value):
+                    effective_dt = 0  # Can't move at all
+            
             # Update position
-            self.position.x += self.velocity.x * dt
-            self.position.y += self.velocity.y * dt
+            self.position.x += self.velocity.x * effective_dt
+            self.position.y += self.velocity.y * effective_dt
             
             # Update heading based on velocity direction
             self.heading = math.atan2(self.velocity.y, self.velocity.x)

@@ -28,6 +28,7 @@ class MessageRouter:
             "chat_message": self._handle_chat_message,
             "llm_request": self._handle_llm_request,
             "toggle_kamikaze": self._handle_toggle_kamikaze,
+            "load_scenario": self._handle_load_scenario,
         }
     
     async def handle_message(self, message: Dict[str, Any], simulation_engine) -> Optional[Dict[str, Any]]:
@@ -234,4 +235,42 @@ class MessageRouter:
             return {
                 "type": "error",
                 "data": {"message": f"Kamikaze toggle error: {str(e)}"}
+            }
+    
+    async def _handle_load_scenario(self, data: Dict[str, Any], simulation_engine) -> Dict[str, Any]:
+        """Handle scenario loading request"""
+        try:
+            scenario_name = data.get("scenario_name")
+            if not scenario_name:
+                return {
+                    "type": "error",
+                    "data": {"message": "Scenario name is required"}
+                }
+            
+            # Create load scenario request
+            request = LoadScenarioRequest(scenario_name=scenario_name)
+            result = simulation_engine.load_scenario(request)
+            
+            if result.get("success"):
+                logger.info(f"Scenario loaded: {scenario_name}")
+                return {
+                    "type": "scenario_loaded",
+                    "data": {
+                        "scenario_name": scenario_name,
+                        "entities_loaded": result.get("entities_loaded", 0),
+                        "should_broadcast": True,
+                        "broadcast_state": simulation_engine.get_state()
+                    }
+                }
+            else:
+                return {
+                    "type": "error",
+                    "data": {"message": result.get("error", "Unknown error loading scenario")}
+                }
+                
+        except Exception as e:
+            logger.error(f"Load scenario error: {e}")
+            return {
+                "type": "error",
+                "data": {"message": f"Load scenario error: {str(e)}"}
             }

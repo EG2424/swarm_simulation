@@ -12,6 +12,7 @@ from pathlib import Path
 
 from communication.schemas import *
 from simulation.entities import Drone, Tank, Entity
+from simulation.terrain import TerrainGrid
 
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,9 @@ class SimulationEngine:
         
         # World properties
         self.arena_bounds = (800.0, 600.0)  # width, height
+        
+        # Terrain system
+        self.terrain = TerrainGrid(width=int(self.arena_bounds[0]), height=int(self.arena_bounds[1]))
         
         # Entity storage
         self.entities: Dict[str, Entity] = {}
@@ -75,6 +79,7 @@ class SimulationEngine:
                 "tanks": len([e for e in self.entities.values() if isinstance(e, Tank)]),
                 "destroyed": len([e for e in self.entities.values() if e.destroyed])
             },
+            "terrain": self.terrain.to_dict(),
             "events": [event.dict() for event in self.events[-50:]],  # Last 50 events
             "chat_messages": [msg.dict() for msg in self.chat_messages[-100:]]  # Last 100 messages
         }
@@ -88,7 +93,7 @@ class SimulationEngine:
         
         # Update all entities
         for entity in self.entities.values():
-            entity.update(self.dt, self.arena_bounds, self.entities)
+            entity.update(self.dt, self.arena_bounds, self.entities, self.terrain)
         
         # Check for entity interactions
         self._check_interactions()
@@ -123,8 +128,21 @@ class SimulationEngine:
             for tank in tanks:
                 distance = drone.distance_to(tank)
                 
-                # Detection
-                if distance <= drone.physics.detection_radius:
+                # Detection with terrain effects
+                # Calculate effective detection radius based on terrain
+                drone_terrain_mult = self.terrain.get_detection_multiplier(drone.position.x, drone.position.y)
+                tank_terrain_mult = self.terrain.get_detection_multiplier(tank.position.x, tank.position.y)
+                avg_terrain_mult = (drone_terrain_mult + tank_terrain_mult) / 2
+                
+                effective_detection_radius = drone.physics.detection_radius * avg_terrain_mult
+                
+                # Check line of sight
+                has_los = self.terrain.check_line_of_sight(
+                    drone.position.x, drone.position.y,
+                    tank.position.x, tank.position.y
+                )
+                
+                if distance <= effective_detection_radius and has_los:
                     if not tank.detected:
                         tank.detected = True
                         self._add_event(DetectionEvent(
@@ -349,6 +367,18 @@ class SimulationEngine:
             if "arena" in scenario_data:
                 arena = scenario_data["arena"]
                 self.arena_bounds = (arena.get("width", 800), arena.get("height", 600))
+            
+            # Load terrain if specified
+            if "terrain" in scenario_data:
+                terrain_data = scenario_data["terrain"]
+                logger.info(f"Loading terrain data: {len(terrain_data.get('grid', []))} rows")
+                success = self.terrain.from_dict(terrain_data)
+                if success:
+                    logger.info(f"Successfully loaded terrain with {len(terrain_data.get('terrain_definitions', {}))} terrain types")
+                else:
+                    logger.error("Failed to load terrain data")
+            else:
+                logger.info("No terrain data in scenario")
             
             # Spawn entities
             for entity_data in scenario_data.get("entities", []):

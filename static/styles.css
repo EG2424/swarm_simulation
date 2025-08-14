@@ -679,3 +679,61 @@ input:checked + .toggle-slider:before {
     color: var(--text-secondary);
     min-width: 50px;
 }
+
+/* Terrain Legend */
+.terrain-legend {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px;
+    margin: 8px 0;
+    font-size: 11px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.legend-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+    font-size: 12px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+    color: var(--text-secondary);
+}
+
+.legend-item:last-child {
+    margin-bottom: 0;
+}
+
+.legend-swatch {
+    width: 14px;
+    height: 14px;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+.legend-swatch.forest {
+    background: #22543d;
+}
+
+.legend-swatch.water {
+    background: #1a365d;
+}
+
+.legend-swatch.road {
+    background: #2d3748;
+}
+
+.legend-swatch.ruins {
+    background: #553c24;
+}
+
+.legend-swatch.minefield {
+    background: #744210;
+}

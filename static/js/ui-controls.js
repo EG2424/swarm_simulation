@@ -85,6 +85,13 @@ class UIControls {
             }
         });
 
+        // Terrain toggle
+        document.getElementById('show-terrain').addEventListener('change', (e) => {
+            if (window.renderer) {
+                window.renderer.setShowTerrain(e.target.checked);
+            }
+        });
+
         // Entity spawn controls
         document.getElementById('add-drone-btn').addEventListener('click', () => {
             this.spawnEntityAtRandomLocation('drone');
@@ -217,8 +224,24 @@ class UIControls {
     }
 
     loadScenario(scenarioName) {
-        // TODO: Implement scenario loading
-        console.log('Loading scenario:', scenarioName);
+        if (!window.wsManager) {
+            console.error('WebSocket manager not available');
+            return;
+        }
+        
+        if (!window.wsManager.isConnected) {
+            console.error('WebSocket not connected');
+            return;
+        }
+        
+        const message = {
+            type: 'load_scenario',
+            data: {
+                scenario_name: scenarioName
+            }
+        };
+        
+        window.wsManager.send(message);
     }
 
     updateSimulationState(data) {
@@ -238,6 +261,11 @@ class UIControls {
         // Update renderer
         if (window.renderer && data.entities) {
             window.renderer.updateEntities(data.entities, data.selected_entities);
+        }
+        
+        // Update terrain
+        if (window.renderer && data.terrain) {
+            window.renderer.updateTerrain(data.terrain);
         }
     }
 
