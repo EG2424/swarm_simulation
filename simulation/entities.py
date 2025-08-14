@@ -227,7 +227,7 @@ class Drone(Entity):
         elif self.mode == DroneMode.RANDOM_SEARCH:
             self._behavior_random_search(dt, entities)
         elif self.mode == DroneMode.WAYPOINT_MODE or self.mode == "patrol_route":
-            self._behavior_waypoint_mode(dt)
+            self._behavior_waypoint_mode(dt, entities)
         elif self.mode == DroneMode.HOLD_POSITION:
             self._behavior_hold_position(dt)
         elif self.mode == DroneMode.KAMIKAZE:
@@ -309,10 +309,31 @@ class Drone(Entity):
             else:
                 self.search_target = None
     
-    def _behavior_waypoint_mode(self, dt: float):
-        """Move along defined waypoint route"""
+    def _behavior_waypoint_mode(self, dt: float, entities: Dict[str, Entity]):
+        """Move along defined waypoint route with tank detection and engagement"""
+        # Check for nearby tanks first (same as random search)
+        for entity in entities.values():
+            if isinstance(entity, Tank) and not entity.destroyed:
+                if self.distance_to(entity) <= self.physics.detection_radius:
+                    entity.detected = True
+                    self.status = "tracking"
+                    self.engage_timer += dt
+                    
+                    # Kamikaze after tracking for 1.5 seconds (only if enabled)
+                    if self.engage_timer >= 1.5 and self.kamikaze_enabled:
+                        # Execute kamikaze attack
+                        self._engage_kamikaze(entity)
+                        return
+                    else:
+                        # Move closer to target instead of following waypoint
+                        self.move_towards(entity.position, self.physics.max_speed * 0.7)
+                        return
+        
+        # No tanks detected, continue waypoint navigation
+        self.engage_timer = 0.0
         if not self.patrol_route:
             self.stop()
+            self.status = "idle"
             return
             
         current_target = self.patrol_route[self.current_waypoint]
