@@ -92,6 +92,13 @@ class UIControls {
             }
         });
 
+        // Patrol routes toggle
+        document.getElementById('show-patrol-routes').addEventListener('change', (e) => {
+            if (window.renderer) {
+                window.renderer.setShowPatrolRoutes(e.target.checked);
+            }
+        });
+
         // Entity spawn controls
         document.getElementById('add-drone-btn').addEventListener('click', () => {
             this.spawnEntityAtRandomLocation('drone');
@@ -556,8 +563,20 @@ class UIControls {
     }
 
     setPatrolRouteForSelected(worldPos) {
-        // TODO: Implement patrol route setting
-        console.log('Set patrol route to', worldPos);
+        const selectedEntities = window.renderer?.entities?.filter(e => e.selected) || [];
+        
+        for (const entity of selectedEntities) {
+            // Add waypoint to existing patrol route
+            const currentRoute = entity.patrol_route || [];
+            const newRoute = [...currentRoute, worldPos];
+            
+            const command = {
+                mode: 'patrol_route',
+                patrol_route: newRoute
+            };
+            
+            window.wsManager.commandEntity(entity.id, command);
+        }
     }
 
     handleKeyPress(e) {

@@ -10,7 +10,21 @@ class EntityControls {
             tank: ['go_to', 'patrol_route', 'hold_position', 'flee_to_cover', 'hide_and_ambush']
         };
         
+        // Waypoint selection state
+        this.waypointMode = false;
+        this.waypointEntityId = null;
+        
         this.setupEventListeners();
+        this.setupCanvasListener();
+    }
+
+    setupCanvasListener() {
+        // Listen for canvas clicks when in waypoint mode
+        window.addEventListener('canvas-click', (e) => {
+            if (this.waypointMode) {
+                this.handleWaypointClick(e.detail.worldPos);
+            }
+        });
     }
 
     setupEventListeners() {
@@ -266,6 +280,7 @@ class EntityControls {
         if (!container) return;
         
         const mode = entity.mode;
+        console.log(`[DEBUG] Creating mode-specific controls for ${entity.type} in ${mode} mode`);
         let controlsHTML = '';
         
         switch (mode) {
@@ -299,6 +314,7 @@ class EntityControls {
                 break;
                 
             case 'patrol_route':
+                console.log(`[DEBUG] Creating patrol_route controls for ${entity.type}`);
                 controlsHTML = `
                     <div class="control-section-title">Patrol Route</div>
                     <div class="patrol-info">
@@ -411,8 +427,15 @@ class EntityControls {
 
     // Command methods
     changeEntityMode(entityId, newMode) {
+        console.log(`[DEBUG] Changing entity ${entityId} mode to ${newMode}`);
         const command = { mode: newMode };
         window.wsManager.commandEntity(entityId, command);
+        
+        // Update the control panel after mode change to show new controls
+        setTimeout(() => {
+            console.log(`[DEBUG] Updating control panel after mode change to ${newMode}`);
+            this.updateControlPanel();
+        }, 100);
     }
 
     setTargetPosition(entityId) {
@@ -544,8 +567,130 @@ class EntityControls {
 
     // Waypoint and route management
     addWaypoint(entityId) {
-        // TODO: Implement waypoint addition on map click
-        console.log('Add waypoint for', entityId);
+        // Enable waypoint selection mode
+        this.waypointMode = true;
+        this.waypointEntityId = entityId;
+        
+        // Show visual feedback
+        const addBtn = document.querySelector(`button[onclick*="addWaypoint('${entityId}')"]`);
+        if (addBtn) {
+            addBtn.textContent = 'Click on map...';
+            addBtn.disabled = true;
+            addBtn.style.backgroundColor = '#FF9F0A';
+        }
+        
+        // Add instruction overlay
+        this.showWaypointInstructions(true);
+        
+        // Initialize with first waypoint message
+        this.updateWaypointInstructions(0);
+    }
+
+    handleWaypointClick(worldPos) {
+        if (!this.waypointMode || !this.waypointEntityId) return;
+        
+        // Get current entity
+        const entity = window.renderer?.entities?.find(e => e.id === this.waypointEntityId);
+        if (!entity) {
+            this.cancelWaypointMode();
+            return;
+        }
+        
+        // Add waypoint to existing patrol route
+        const currentRoute = entity.patrol_route || [];
+        const newRoute = [...currentRoute, worldPos];
+        
+        // Send command to update patrol route
+        const command = {
+            mode: 'patrol_route',
+            patrol_route: newRoute
+        };
+        
+        window.wsManager.commandEntity(this.waypointEntityId, command);
+        
+        // Stay in waypoint mode for sequential adding
+        // Just refresh the control panel to show updated waypoint count
+        setTimeout(() => {
+            this.updateControlPanel();
+            this.updateWaypointButton();
+        }, 100);
+    }
+
+    cancelWaypointMode() {
+        this.waypointMode = false;
+        
+        // Reset button
+        if (this.waypointEntityId) {
+            const addBtn = document.querySelector(`button[onclick*="addWaypoint('${this.waypointEntityId}')"]`);
+            if (addBtn) {
+                addBtn.textContent = 'Add Waypoint';
+                addBtn.disabled = false;
+                addBtn.style.backgroundColor = '';
+            }
+        }
+        
+        this.waypointEntityId = null;
+        this.showWaypointInstructions(false);
+    }
+
+    updateWaypointButton() {
+        if (!this.waypointMode || !this.waypointEntityId) return;
+        
+        // Get current waypoint count
+        const entity = window.renderer?.entities?.find(e => e.id === this.waypointEntityId);
+        const waypointCount = entity?.patrol_route?.length || 0;
+        
+        // Update button text to show progress
+        const addBtn = document.querySelector(`button[onclick*="addWaypoint('${this.waypointEntityId}')"]`);
+        if (addBtn) {
+            addBtn.textContent = `Added ${waypointCount} waypoint${waypointCount !== 1 ? 's' : ''} - Click for more...`;
+        }
+        
+        // Update instruction text
+        this.updateWaypointInstructions(waypointCount);
+    }
+
+    updateWaypointInstructions(waypointCount) {
+        const instructionDiv = document.getElementById('waypoint-instructions');
+        if (instructionDiv) {
+            const content = instructionDiv.querySelector('.instruction-content span');
+            if (content) {
+                if (waypointCount === 0) {
+                    content.textContent = 'Click on the map to add your first waypoint';
+                } else if (waypointCount === 1) {
+                    content.textContent = 'Click on the map to add another waypoint';
+                } else {
+                    content.textContent = `${waypointCount} waypoints added - Click to add more`;
+                }
+            }
+        }
+    }
+
+    showWaypointInstructions(show) {
+        let instructionDiv = document.getElementById('waypoint-instructions');
+        
+        if (show) {
+            if (!instructionDiv) {
+                instructionDiv = document.createElement('div');
+                instructionDiv.id = 'waypoint-instructions';
+                instructionDiv.className = 'waypoint-instructions';
+                instructionDiv.innerHTML = `
+                    <div class="instruction-content">
+                        <span>Click on the map to add a waypoint</span>
+                        <div class="instruction-buttons">
+                            <button onclick="window.entityControls.cancelWaypointMode()" class="done-btn">Done</button>
+                            <button onclick="window.entityControls.cancelWaypointMode()" class="cancel-btn">Cancel</button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(instructionDiv);
+            }
+            instructionDiv.style.display = 'block';
+        } else {
+            if (instructionDiv) {
+                instructionDiv.style.display = 'none';
+            }
+        }
     }
 
     clearRoute(entityId) {

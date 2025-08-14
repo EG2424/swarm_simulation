@@ -523,6 +523,82 @@ body {
     background: var(--bg-tertiary);
 }
 
+/* Waypoint Instructions */
+.waypoint-instructions {
+    position: fixed;
+    top: 80px;
+    left: 20px;
+    background: var(--bg-secondary);
+    border: 2px solid var(--warning);
+    border-radius: 8px;
+    padding: 12px;
+    box-shadow: 0 4px 12px var(--shadow);
+    z-index: 9999;
+    pointer-events: all;
+    max-width: 300px;
+}
+
+.instruction-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.instruction-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.done-btn {
+    background: var(--success);
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.done-btn:hover {
+    background: #0e6f0e;
+}
+
+.cancel-btn {
+    background: var(--danger);
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.cancel-btn:hover {
+    background: #cc0000;
+}
+
+/* Patrol Controls */
+.patrol-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 8px 0;
+}
+
+.patrol-controls .control-btn {
+    margin: 0;
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
+.patrol-info {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 4px 0;
+}
+
 /* Control Panel */
 .control-panel {
     display: flex;

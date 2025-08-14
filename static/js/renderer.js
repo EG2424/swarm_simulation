@@ -20,7 +20,7 @@ class CanvasRenderer {
         // Rendering settings
         this.entityScale = 1.0;
         this.showDetectionRanges = false;
-        this.showPatrolRoutes = false;  // Disabled to fix rendering bug
+        this.showPatrolRoutes = true;  // Show patrol routes for waypoint system
         this.showSelectionOutlines = true;
         this.showTerrain = true;
         
@@ -130,6 +130,10 @@ class CanvasRenderer {
         this.showTerrain = show;
     }
 
+    setShowPatrolRoutes(show) {
+        this.showPatrolRoutes = show;
+    }
+
     centerViewport(worldX, worldY) {
         this.viewport.x = worldX - this.viewport.width / (2 * this.viewport.zoom);
         this.viewport.y = worldY - this.viewport.height / (2 * this.viewport.zoom);
@@ -203,8 +207,8 @@ class CanvasRenderer {
         this.ctx.translate(pos.x, pos.y);
         this.ctx.rotate(entity.heading);
         
-        // Draw patrol route BEFORE entity transformation (if enabled and entity has route)
-        if (this.showPatrolRoutes && entity.patrol_route && entity.patrol_route.length > 0) {
+        // Draw patrol route BEFORE entity transformation (if enabled globally OR entity is selected)
+        if ((this.showPatrolRoutes || isSelected) && entity.patrol_route && entity.patrol_route.length > 0) {
             // Temporarily restore context to draw unrotated route
             this.ctx.restore();
             this.drawPatrolRoute(entity);
@@ -343,7 +347,7 @@ class CanvasRenderer {
     }
 
     drawPatrolRoute(entity) {
-        if (!entity.patrol_route || entity.patrol_route.length < 2) return;
+        if (!entity.patrol_route || entity.patrol_route.length < 1) return;
         
         // Save current context state
         this.ctx.save();
@@ -351,40 +355,77 @@ class CanvasRenderer {
         // Reset transformations for drawing routes
         this.ctx.setTransform(1, 0, 0, 1, 0, 0);
         
-        this.ctx.strokeStyle = this.colors.patrolRoute;
-        this.ctx.lineWidth = 1;
-        this.ctx.setLineDash([3, 3]);
-        this.ctx.globalAlpha = 0.7;
+        const isSelected = this.selectedEntityIds.includes(entity.id);
         
-        this.ctx.beginPath();
+        // Enhanced visibility for selected entities
+        if (isSelected) {
+            this.ctx.strokeStyle = '#FFD700';  // Gold color for selected
+            this.ctx.lineWidth = 2;
+            this.ctx.setLineDash([5, 5]);
+            this.ctx.globalAlpha = 0.9;
+        } else {
+            this.ctx.strokeStyle = this.colors.patrolRoute;
+            this.ctx.lineWidth = 1;
+            this.ctx.setLineDash([3, 3]);
+            this.ctx.globalAlpha = 0.7;
+        }
         
+        // Draw lines connecting waypoints (if more than one)
+        if (entity.patrol_route.length > 1) {
+            this.ctx.beginPath();
+            
+            for (let i = 0; i < entity.patrol_route.length; i++) {
+                const waypoint = entity.patrol_route[i];
+                const pos = this.worldToScreen(waypoint.x, waypoint.y);
+                
+                if (i === 0) {
+                    this.ctx.moveTo(pos.x, pos.y);
+                } else {
+                    this.ctx.lineTo(pos.x, pos.y);
+                }
+            }
+            
+            // Close the loop if it's a patrol route with more than 2 waypoints
+            if (entity.patrol_route.length > 2) {
+                const firstPos = this.worldToScreen(entity.patrol_route[0].x, entity.patrol_route[0].y);
+                this.ctx.lineTo(firstPos.x, firstPos.y);
+            }
+            
+            this.ctx.stroke();
+        }
+        
+        // Draw waypoint markers (larger for selected entities)
+        this.ctx.setLineDash([]);
         for (let i = 0; i < entity.patrol_route.length; i++) {
             const waypoint = entity.patrol_route[i];
             const pos = this.worldToScreen(waypoint.x, waypoint.y);
             
-            if (i === 0) {
-                this.ctx.moveTo(pos.x, pos.y);
+            // Different styling for selected vs unselected
+            if (isSelected) {
+                // Outer circle (white)
+                this.ctx.fillStyle = '#FFFFFF';
+                this.ctx.beginPath();
+                this.ctx.arc(pos.x, pos.y, 5, 0, 2 * Math.PI);
+                this.ctx.fill();
+                
+                // Inner circle (gold)
+                this.ctx.fillStyle = '#FFD700';
+                this.ctx.beginPath();
+                this.ctx.arc(pos.x, pos.y, 3, 0, 2 * Math.PI);
+                this.ctx.fill();
+                
+                // Add waypoint number
+                this.ctx.fillStyle = '#000000';
+                this.ctx.font = '10px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText((i + 1).toString(), pos.x, pos.y + 3);
             } else {
-                this.ctx.lineTo(pos.x, pos.y);
+                // Simple small circle
+                this.ctx.fillStyle = this.colors.patrolRoute;
+                this.ctx.beginPath();
+                this.ctx.arc(pos.x, pos.y, 2, 0, 2 * Math.PI);
+                this.ctx.fill();
             }
-        }
-        
-        // Close the loop if it's a patrol route
-        if (entity.patrol_route.length > 2) {
-            const firstPos = this.worldToScreen(entity.patrol_route[0].x, entity.patrol_route[0].y);
-            this.ctx.lineTo(firstPos.x, firstPos.y);
-        }
-        
-        this.ctx.stroke();
-        
-        // Draw waypoint markers
-        this.ctx.fillStyle = this.colors.patrolRoute;
-        this.ctx.setLineDash([]);
-        for (const waypoint of entity.patrol_route) {
-            const pos = this.worldToScreen(waypoint.x, waypoint.y);
-            this.ctx.beginPath();
-            this.ctx.arc(pos.x, pos.y, 2, 0, 2 * Math.PI);
-            this.ctx.fill();
         }
         
         // Restore context
@@ -477,8 +518,8 @@ class CanvasRenderer {
         if (clickedEntity) {
             // Select entity
             window.wsManager.selectEntity(clickedEntity.id, true, shiftKey);
-        } else if (!shiftKey) {
-            // Clear selection if not holding shift
+        } else if (!shiftKey && !window.entityControls?.waypointMode) {
+            // Clear selection if not holding shift and not in waypoint mode
             for (const entityId of this.selectedEntityIds) {
                 window.wsManager.selectEntity(entityId, false);
             }
