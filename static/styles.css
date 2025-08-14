@@ -1044,3 +1044,37 @@ input:checked + .toggle-slider:before {
         padding: 12px;
     }
 }
+
+/* Speed Control Enhancements */
+.speed-presets {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+    justify-content: center;
+}
+
+.speed-btn {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 28px;
+}
+
+.speed-btn:hover {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: white;
+}
+
+.speed-btn:active {
+    transform: translateY(1px);
+}
+
+.control-group {
+    position: relative;
+}

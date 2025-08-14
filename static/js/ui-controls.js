@@ -633,5 +633,19 @@ class UIControls {
     }
 }
 
+// Global speed preset function
+function setSpeed(speed) {
+    if (window.uiControls) {
+        window.uiControls.speedMultiplier = speed;
+        
+        // Update slider and display
+        document.getElementById('speed-slider').value = speed;
+        document.getElementById('speed-display').textContent = `${speed.toFixed(1)}x`;
+        
+        // Send to simulation
+        window.uiControls.controlSimulation('set_speed', speed);
+    }
+}
+
 // Global UI controls instance
 window.uiControls = null;
