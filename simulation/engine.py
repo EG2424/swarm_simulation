@@ -220,7 +220,27 @@ class SimulationEngine:
             return {"success": False, "error": str(e)}
     
     def spawn_entity(self, request: SpawnEntityRequest) -> Entity:
-        """Spawn new entity"""
+        """Spawn new entity with terrain validation"""
+        logger.info(f"Attempting to spawn {request.type.value} at ({request.position.x}, {request.position.y})")
+        
+        # Validate spawn position based on entity type
+        is_valid = self._is_valid_spawn_position(request.position.x, request.position.y, request.type)
+        logger.info(f"Spawn position validation result: {is_valid}")
+        
+        if not is_valid:
+            logger.info(f"Invalid spawn position, searching for alternative...")
+            # Find nearest valid position if requested position is invalid
+            valid_position = self._find_nearest_valid_spawn_position(
+                request.position.x, request.position.y, request.type
+            )
+            if not valid_position:
+                error_msg = f"Cannot spawn {request.type.value} at ({request.position.x}, {request.position.y}): no valid spawn location found"
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+            
+            logger.info(f"Adjusted spawn position for {request.type.value} from ({request.position.x}, {request.position.y}) to ({valid_position[0]}, {valid_position[1]})")
+            request.position.x, request.position.y = valid_position
+        
         entity_id = str(uuid.uuid4())
         
         if request.type == EntityType.DRONE:
@@ -472,3 +492,82 @@ class SimulationEngine:
             
         except Exception as e:
             logger.error(f"Error spawning demo entities: {e}")
+    
+    def _is_valid_spawn_position(self, x: float, y: float, entity_type: EntityType) -> bool:
+        """Check if a position is valid for spawning the given entity type"""
+        # Check arena bounds
+        if x < 0 or y < 0 or x >= self.arena_bounds[0] or y >= self.arena_bounds[1]:
+            logger.debug(f"Spawn position ({x}, {y}) is out of arena bounds")
+            return False
+        
+        # Check terrain constraints
+        entity_type_str = entity_type.value
+        
+        # Drones can spawn anywhere within bounds (they can fly)
+        if entity_type == EntityType.DRONE:
+            return True
+        
+        # Tanks cannot spawn in blocked terrain (water, etc.)
+        if entity_type == EntityType.TANK:
+            # Get the terrain at this position
+            terrain_info = self.terrain.get_terrain_at(x, y)
+            is_blocked = self.terrain.is_blocked(x, y, entity_type_str)
+            move_cost = self.terrain.get_movement_cost(x, y, entity_type_str)
+            
+            logger.info(f"Spawn validation for tank at ({x}, {y}):")
+            logger.info(f"  Terrain type: {terrain_info.id}")
+            logger.info(f"  Is blocked: {is_blocked}")
+            logger.info(f"  Move cost: {move_cost}")
+            logger.info(f"  Terrain blocked flag: {terrain_info.blocked}")
+            
+            if is_blocked:
+                logger.info(f"Position ({x}, {y}) is blocked for tanks - REJECTING")
+                return False
+            
+            # Also check if terrain has very high movement cost (effectively impassable)
+            if move_cost > 5.0:  # Arbitrary threshold for "too difficult to spawn in"
+                logger.info(f"Position ({x}, {y}) has high move cost {move_cost} for tanks - REJECTING")
+                return False
+        
+        # Check for collision with existing entities
+        collision_radius = 15.0  # Minimum distance from other entities
+        for entity in self.entities.values():
+            if not entity.destroyed:
+                distance = math.sqrt((x - entity.position.x)**2 + (y - entity.position.y)**2)
+                if distance < collision_radius:
+                    logger.info(f"Position ({x}, {y}) too close to existing entity {entity.id}")
+                    return False
+        
+        return True
+    
+    def _find_nearest_valid_spawn_position(self, x: float, y: float, entity_type: EntityType, max_search_radius: float = 100.0) -> Optional[Tuple[float, float]]:
+        """Find the nearest valid spawn position within search radius"""
+        # Try positions in expanding circles around the requested position
+        search_step = 10.0
+        
+        for radius in range(int(search_step), int(max_search_radius), int(search_step)):
+            # Try 8 positions around the circle
+            for angle_step in range(0, 360, 45):
+                angle = math.radians(angle_step)
+                test_x = x + radius * math.cos(angle)
+                test_y = y + radius * math.sin(angle)
+                
+                if self._is_valid_spawn_position(test_x, test_y, entity_type):
+                    return (test_x, test_y)
+        
+        # If no valid position found in search radius, try some fallback positions
+        # Try corners of the arena (usually safe)
+        fallback_positions = [
+            (50, 50),  # Top-left
+            (self.arena_bounds[0] - 50, 50),  # Top-right
+            (50, self.arena_bounds[1] - 50),  # Bottom-left
+            (self.arena_bounds[0] - 50, self.arena_bounds[1] - 50),  # Bottom-right
+            (self.arena_bounds[0] / 2, 50),  # Top-center
+            (self.arena_bounds[0] / 2, self.arena_bounds[1] - 50),  # Bottom-center
+        ]
+        
+        for test_x, test_y in fallback_positions:
+            if self._is_valid_spawn_position(test_x, test_y, entity_type):
+                return (test_x, test_y)
+        
+        return None
