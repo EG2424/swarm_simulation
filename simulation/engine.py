@@ -91,9 +91,10 @@ class SimulationEngine:
             
         current_time = time.time()
         
-        # Update all entities
+        # Update all entities with speed-scaled timestep
+        scaled_dt = self.dt * self.speed_multiplier
         for entity in self.entities.values():
-            entity.update(self.dt, self.arena_bounds, self.entities, self.terrain)
+            entity.update(scaled_dt, self.arena_bounds, self.entities, self.terrain)
         
         # Check for entity interactions
         self._check_interactions()
@@ -101,8 +102,8 @@ class SimulationEngine:
         # Clean up destroyed entities (after some delay)
         self._cleanup_destroyed_entities()
         
-        # Update simulation time
-        self.simulation_time += self.dt
+        # Update simulation time with speed scaling
+        self.simulation_time += scaled_dt
         
         # Update performance metrics
         self.update_count += 1
@@ -209,8 +210,8 @@ class SimulationEngine:
                 
             elif command.action == "set_speed":
                 if command.speed_multiplier is not None:
-                    self.speed_multiplier = max(0.1, min(10.0, command.speed_multiplier))
-                    self.dt = self.base_dt * self.speed_multiplier
+                    self.speed_multiplier = max(0.1, min(20.0, command.speed_multiplier))
+                    # Keep dt constant for fixed timestep, speed multiplier affects physics calculations
                     logger.info(f"Simulation speed set to {self.speed_multiplier}x")
             
             return {"success": True, "state": self.state.value}

@@ -73,9 +73,13 @@ class MessageRouter:
             request = SimulationControlRequest(**data)
             result = simulation_engine.handle_control_command(request)
             
-            # Special handling for reset command - mark for broadcasting
+            # Special handling for commands that need broadcasting
             if request.action == "reset" and "broadcast_state" in result:
                 result["should_broadcast"] = True
+            elif request.action == "set_speed":
+                # Speed changes should be broadcast to all clients for synchronization
+                result["should_broadcast"] = True
+                result["broadcast_state"] = simulation_engine.get_state()
             
             return {
                 "type": "control_response",

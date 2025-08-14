@@ -295,8 +295,8 @@ async def simulation_loop():
                     "data": delta_state
                 }))
                 
-            # Sleep for fixed timestep
-            await asyncio.sleep(simulation_engine.dt)
+            # Sleep for fixed timestep (base dt, not scaled dt)
+            await asyncio.sleep(simulation_engine.base_dt)
             
         except Exception as e:
             logger.error(f"Simulation loop error: {e}")
