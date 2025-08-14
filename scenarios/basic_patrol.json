@@ -25,7 +25,7 @@
       "x": 200,
       "y": 300,
       "heading": 0,
-      "mode": "patrol_route",
+      "mode": "waypoint_mode",
       "patrol_route": [
         {"x": 150, "y": 250},
         {"x": 250, "y": 250},
@@ -38,7 +38,7 @@
       "x": 600,
       "y": 400,
       "heading": 1.57,
-      "mode": "patrol_route",
+      "mode": "waypoint_mode",
       "patrol_route": [
         {"x": 550, "y": 350},
         {"x": 650, "y": 350},

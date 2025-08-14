@@ -389,8 +389,9 @@ class SimulationEngine:
                 arena = scenario_data["arena"]
                 self.arena_bounds = (arena.get("width", 800), arena.get("height", 600))
             
-            # Load terrain if specified
+            # Always reset terrain when loading a scenario
             if "terrain" in scenario_data:
+                # Load scenario-specific terrain
                 terrain_data = scenario_data["terrain"]
                 logger.info(f"Loading terrain data: {len(terrain_data.get('grid', []))} rows")
                 success = self.terrain.from_dict(terrain_data)
@@ -398,8 +399,13 @@ class SimulationEngine:
                     logger.info(f"Successfully loaded terrain with {len(terrain_data.get('terrain_definitions', {}))} terrain types")
                 else:
                     logger.error("Failed to load terrain data")
+                    # Fall back to default terrain if scenario terrain fails
+                    self.terrain.reset_to_default()
+                    logger.info("Reset to default terrain after terrain loading failure")
             else:
-                logger.info("No terrain data in scenario")
+                # Reset to default terrain for scenarios without terrain data
+                self.terrain.reset_to_default()
+                logger.info("Reset to default terrain (no terrain data in scenario)")
             
             # Spawn entities
             for entity_data in scenario_data.get("entities", []):

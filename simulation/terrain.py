@@ -129,6 +129,11 @@ class TerrainGrid:
                 row.append(TerrainType.OPEN.value)
             self.grid.append(row)
     
+    def reset_to_default(self):
+        """Reset terrain to default (all open terrain)"""
+        self._init_default_terrain_types()
+        self._init_grid()
+    
     def world_to_grid(self, world_x: float, world_y: float) -> Tuple[int, int]:
         """Convert world coordinates to grid coordinates"""
         grid_x = int(world_x // self.cell_size)

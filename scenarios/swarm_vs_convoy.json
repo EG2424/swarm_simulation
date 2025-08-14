@@ -39,7 +39,7 @@
       "x": 400,
       "y": 100,
       "heading": 1.57,
-      "mode": "patrol_route",
+      "mode": "waypoint_mode",
       "patrol_route": [
         {"x": 400, "y": 100},
         {"x": 400, "y": 500},
@@ -52,7 +52,7 @@
       "x": 440,
       "y": 100,
       "heading": 1.57,
-      "mode": "patrol_route",
+      "mode": "waypoint_mode",
       "patrol_route": [
         {"x": 440, "y": 100},
         {"x": 440, "y": 500},
@@ -65,7 +65,7 @@
       "x": 480,
       "y": 100,
       "heading": 1.57,
-      "mode": "patrol_route",
+      "mode": "waypoint_mode",
       "patrol_route": [
         {"x": 480, "y": 100},
         {"x": 480, "y": 500},
