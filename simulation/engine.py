@@ -458,46 +458,74 @@ class SimulationEngine:
         return self.get_state()
     
     def _spawn_demo_entities(self):
-        """Spawn some demo entities for initial demonstration"""
+        """Spawn some demo entities for initial demonstration using proper validation"""
         try:
-            # Spawn 2 drones
-            drone1 = Drone("demo_drone_1", 150, 100)
-            drone1.mode = DroneMode.RANDOM_SEARCH
-            self.entities[drone1.id] = drone1
-            self.total_spawned += 1
+            # Spawn 2 drones using the proper spawn system
+            try:
+                drone1_request = SpawnEntityRequest(
+                    type=EntityType.DRONE,
+                    position=Vector2D(x=150, y=100),
+                    mode=DroneMode.RANDOM_SEARCH
+                )
+                self.spawn_entity(drone1_request)
+            except Exception as e:
+                logger.warning(f"Could not spawn demo drone 1: {e}")
             
-            drone2 = Drone("demo_drone_2", 650, 100)
-            drone2.mode = DroneMode.RANDOM_SEARCH  
-            self.entities[drone2.id] = drone2
-            self.total_spawned += 1
+            try:
+                drone2_request = SpawnEntityRequest(
+                    type=EntityType.DRONE,
+                    position=Vector2D(x=650, y=100),
+                    mode=DroneMode.RANDOM_SEARCH
+                )
+                self.spawn_entity(drone2_request)
+            except Exception as e:
+                logger.warning(f"Could not spawn demo drone 2: {e}")
             
-            # Spawn 2 tanks
-            tank1 = Tank("demo_tank_1", 300, 300)
-            tank1.mode = TankMode.PATROL_ROUTE
-            tank1.patrol_route = [
-                Vector2D(x=250, y=250),
-                Vector2D(x=350, y=250),
-                Vector2D(x=350, y=350),
-                Vector2D(x=250, y=350)
-            ]
-            self.entities[tank1.id] = tank1
-            self.total_spawned += 1
+            # Spawn 2 tanks in safe locations using proper validation
+            try:
+                tank1_request = SpawnEntityRequest(
+                    type=EntityType.TANK,
+                    position=Vector2D(x=100, y=100),  # Safe open area
+                    mode=TankMode.PATROL_ROUTE
+                )
+                tank1 = self.spawn_entity(tank1_request)
+                # Set patrol route after spawning
+                tank1.patrol_route = [
+                    Vector2D(x=80, y=80),
+                    Vector2D(x=120, y=80),
+                    Vector2D(x=120, y=120),
+                    Vector2D(x=80, y=120)
+                ]
+            except Exception as e:
+                logger.warning(f"Could not spawn demo tank 1: {e}")
             
-            tank2 = Tank("demo_tank_2", 500, 400)
-            tank2.mode = TankMode.HIDE_AND_AMBUSH
-            self.entities[tank2.id] = tank2
-            self.total_spawned += 1
+            try:
+                tank2_request = SpawnEntityRequest(
+                    type=EntityType.TANK,
+                    position=Vector2D(x=700, y=500),  # Safe open area
+                    mode=TankMode.HIDE_AND_AMBUSH
+                )
+                self.spawn_entity(tank2_request)
+            except Exception as e:
+                logger.warning(f"Could not spawn demo tank 2: {e}")
             
-            logger.info(f"Spawned {len(self.entities)} demo entities")
+            logger.info(f"Spawned {len(self.entities)} demo entities using proper validation")
             
         except Exception as e:
             logger.error(f"Error spawning demo entities: {e}")
     
     def _is_valid_spawn_position(self, x: float, y: float, entity_type: EntityType) -> bool:
         """Check if a position is valid for spawning the given entity type"""
+        logger.info(f"=== SPAWN VALIDATION START for {entity_type.value} at ({x}, {y}) ===")
+        
+        # Check if terrain system is initialized
+        if not self.terrain:
+            logger.error("ERROR: Terrain system not initialized!")
+            return True  # Allow spawn if no terrain system
+        
         # Check arena bounds
         if x < 0 or y < 0 or x >= self.arena_bounds[0] or y >= self.arena_bounds[1]:
-            logger.debug(f"Spawn position ({x}, {y}) is out of arena bounds")
+            logger.info(f"REJECTED: Position ({x}, {y}) is out of arena bounds ({self.arena_bounds})")
             return False
         
         # Check terrain constraints
@@ -509,24 +537,31 @@ class SimulationEngine:
         
         # Tanks cannot spawn in blocked terrain (water, etc.)
         if entity_type == EntityType.TANK:
-            # Get the terrain at this position
-            terrain_info = self.terrain.get_terrain_at(x, y)
-            is_blocked = self.terrain.is_blocked(x, y, entity_type_str)
-            move_cost = self.terrain.get_movement_cost(x, y, entity_type_str)
-            
-            logger.info(f"Spawn validation for tank at ({x}, {y}):")
-            logger.info(f"  Terrain type: {terrain_info.id}")
-            logger.info(f"  Is blocked: {is_blocked}")
-            logger.info(f"  Move cost: {move_cost}")
-            logger.info(f"  Terrain blocked flag: {terrain_info.blocked}")
-            
-            if is_blocked:
-                logger.info(f"Position ({x}, {y}) is blocked for tanks - REJECTING")
-                return False
-            
-            # Also check if terrain has very high movement cost (effectively impassable)
-            if move_cost > 5.0:  # Arbitrary threshold for "too difficult to spawn in"
-                logger.info(f"Position ({x}, {y}) has high move cost {move_cost} for tanks - REJECTING")
+            try:
+                # Get the terrain at this position
+                logger.info(f"Checking terrain for tank at ({x}, {y})")
+                terrain_info = self.terrain.get_terrain_at(x, y)
+                is_blocked = self.terrain.is_blocked(x, y, entity_type_str)
+                move_cost = self.terrain.get_movement_cost(x, y, entity_type_str)
+                
+                logger.info(f"  Terrain type: {terrain_info.id}")
+                logger.info(f"  Is blocked: {is_blocked}")
+                logger.info(f"  Move cost: {move_cost}")
+                logger.info(f"  Terrain blocked flag: {terrain_info.blocked}")
+                
+                if is_blocked:
+                    logger.info(f"REJECTED: Position ({x}, {y}) is blocked for tanks")
+                    return False
+                
+                # Also check if terrain has very high movement cost (effectively impassable)
+                if move_cost > 5.0:  # Arbitrary threshold for "too difficult to spawn in"
+                    logger.info(f"REJECTED: Position ({x}, {y}) has high move cost {move_cost} for tanks")
+                    return False
+                    
+                logger.info(f"Terrain check PASSED for tank at ({x}, {y})")
+            except Exception as e:
+                logger.error(f"ERROR during terrain check: {e}")
+                logger.info(f"REJECTED: Terrain check failed with error")
                 return False
         
         # Check for collision with existing entities
@@ -535,9 +570,10 @@ class SimulationEngine:
             if not entity.destroyed:
                 distance = math.sqrt((x - entity.position.x)**2 + (y - entity.position.y)**2)
                 if distance < collision_radius:
-                    logger.info(f"Position ({x}, {y}) too close to existing entity {entity.id}")
+                    logger.info(f"REJECTED: Position ({x}, {y}) too close to existing entity {entity.id}")
                     return False
         
+        logger.info(f"=== SPAWN VALIDATION RESULT: APPROVED for {entity_type.value} at ({x}, {y}) ===")
         return True
     
     def _find_nearest_valid_spawn_position(self, x: float, y: float, entity_type: EntityType, max_search_radius: float = 100.0) -> Optional[Tuple[float, float]]:

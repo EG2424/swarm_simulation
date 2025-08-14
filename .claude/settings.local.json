@@ -3,7 +3,9 @@
     "allow": [
       "Bash(git commit:*)",
       "Bash(git add:*)",
-      "Bash(./start.bat)"
+      "Bash(./start.bat)",
+      "Bash(start http://localhost:8000)",
+      "Bash(taskkill:*)"
     ],
     "deny": [],
     "ask": []

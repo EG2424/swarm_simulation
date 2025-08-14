@@ -215,9 +215,28 @@ class UIControls {
     }
 
     spawnEntityAtRandomLocation(type, mode = null) {
-        // Generate random position within arena bounds
-        const x = 50 + Math.random() * 700;
-        const y = 50 + Math.random() * 500;
+        // Generate safe random position for tanks, any position for drones
+        let x, y;
+        
+        if (type === 'tank') {
+            // For tanks, choose safe locations away from water and obstacles
+            const safeAreas = [
+                { minX: 50, maxX: 200, minY: 50, maxY: 150 },     // Top-left
+                { minX: 600, maxX: 750, minY: 50, maxY: 150 },    // Top-right  
+                { minX: 50, maxX: 200, minY: 400, maxY: 550 },    // Bottom-left
+                { minX: 600, maxX: 750, minY: 400, maxY: 550 },   // Bottom-right
+                { minX: 50, maxX: 750, minY: 350, maxY: 550 }     // Bottom strip
+            ];
+            
+            const area = safeAreas[Math.floor(Math.random() * safeAreas.length)];
+            x = area.minX + Math.random() * (area.maxX - area.minX);
+            y = area.minY + Math.random() * (area.maxY - area.minY);
+        } else {
+            // Drones can spawn anywhere (they can fly)
+            x = 50 + Math.random() * 700;
+            y = 50 + Math.random() * 500;
+        }
+        
         const heading = Math.random() * 2 * Math.PI;
         
         window.wsManager.spawnEntity(type, { x, y }, heading, mode);
