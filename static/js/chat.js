@@ -8,6 +8,7 @@ class ChatSystem {
         this.events = [];
         this.maxChatMessages = 100;
         this.maxEvents = 50;
+        this.userScrolledEvents = false; // Track if user manually scrolled
         
         this.setupEventListeners();
         this.setupWebSocketHandlers();
@@ -32,6 +33,15 @@ class ChatSystem {
         document.getElementById('clear-events-btn').addEventListener('click', () => {
             this.clearEvents();
         });
+
+        // Track manual scrolling on events list
+        const eventsContainer = document.getElementById('events-list');
+        if (eventsContainer) {
+            eventsContainer.addEventListener('scroll', () => {
+                // Check if user scrolled away from the top
+                this.userScrolledEvents = eventsContainer.scrollTop > 5;
+            });
+        }
     }
 
     setupWebSocketHandlers() {
@@ -217,8 +227,9 @@ class ChatSystem {
             eventsContainer.appendChild(eventElement);
         }
         
-        // Auto-scroll to top for events (newest first)
-        if (wasAtBottom || sortedEvents.length === this.events.length) {
+        // Only auto-scroll to top if user hasn't manually scrolled AND was at the bottom
+        // This preserves the user's manual scroll position
+        if (!this.userScrolledEvents && wasAtBottom) {
             eventsContainer.scrollTop = 0;
         }
     }
@@ -305,6 +316,7 @@ class ChatSystem {
     clearEvents() {
         if (confirm('Clear all events?')) {
             this.events = [];
+            this.userScrolledEvents = false; // Reset scroll tracking when clearing
             this.updateEventsDisplay();
         }
     }

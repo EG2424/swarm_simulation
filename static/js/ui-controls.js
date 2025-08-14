@@ -539,10 +539,6 @@ class UIControls {
                 // Set patrol route for selected entities
                 this.setPatrolRouteForSelected(worldPos);
                 break;
-            case 'remove':
-                // Remove entities at this position
-                this.removeEntitiesAt(worldPos);
-                break;
         }
     }
 
@@ -562,11 +558,6 @@ class UIControls {
     setPatrolRouteForSelected(worldPos) {
         // TODO: Implement patrol route setting
         console.log('Set patrol route to', worldPos);
-    }
-
-    removeEntitiesAt(worldPos) {
-        // TODO: Implement entity removal at position
-        console.log('Remove entities at', worldPos);
     }
 
     handleKeyPress(e) {
