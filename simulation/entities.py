@@ -377,9 +377,9 @@ class Drone(Entity):
         self.status = "engaging"
         target.status = "destroyed"
         
-        # Calculate impact position (midpoint for visual effect)
-        impact_x = (self.position.x + target.position.x) / 2
-        impact_y = (self.position.y + target.position.y) / 2
+        # Impact position is the tank's position (drone crashes into tank)
+        impact_x = target.position.x
+        impact_y = target.position.y
         impact_pos = Vector2D(x=impact_x, y=impact_y)
         
         # Stop movement first to prevent any further physics updates
@@ -392,11 +392,10 @@ class Drone(Entity):
         self.kamikaze_impact_position = impact_pos
         target.kamikaze_impact_position = impact_pos
         
-        # Move both entities to impact position
+        # Move drone to tank's position (tank stays where it is)
         self.position.x = impact_x
         self.position.y = impact_y
-        target.position.x = impact_x
-        target.position.y = impact_y
+        # Tank position remains unchanged
         
         # Destroy both entities LAST
         self.destroyed = True

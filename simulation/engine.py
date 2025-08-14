@@ -114,6 +114,10 @@ class SimulationEngine:
         drones = [e for e in self.entities.values() if isinstance(e, Drone) and not e.destroyed]
         tanks = [e for e in self.entities.values() if isinstance(e, Tank) and not e.destroyed]
         
+        # Reset tank detection states first
+        for tank in tanks:
+            tank.detected = False
+        
         # Drone-Tank detection and engagement
         for drone in drones:
             for tank in tanks:
@@ -129,6 +133,9 @@ class SimulationEngine:
                             target_id=tank.id,
                             distance=distance
                         ))
+                    else:
+                        # Tank already detected, just maintain the state
+                        tank.detected = True
                 
                 # Kamikaze engagement (very close range)
                 if distance <= 5.0 and drone.status == "engaging":
@@ -177,8 +184,10 @@ class SimulationEngine:
                 logger.info("Simulation paused")
                 
             elif command.action == "reset":
-                self._reset_simulation()
+                reset_state = self._reset_simulation()
                 logger.info("Simulation reset")
+                # Return the empty state to trigger a broadcast
+                return {"success": True, "state": self.state.value, "broadcast_state": reset_state}
                 
             elif command.action == "set_speed":
                 if command.speed_multiplier is not None:
@@ -394,6 +403,9 @@ class SimulationEngine:
         self.scenario_data = {}
         
         logger.info("Simulation reset")
+        
+        # Return state data to force a broadcast update with empty entities
+        return self.get_state()
     
     def _spawn_demo_entities(self):
         """Spawn some demo entities for initial demonstration"""
