@@ -40,6 +40,9 @@ class CanvasRenderer {
         this.selectedEntityIds = [];
         this.terrain = null;
         
+        // AoE3-style terrain renderer
+        this.terrainRenderer = new TerrainRenderer(this.ctx);
+        
         this.setupCanvas();
         this.setupEventListeners();
     }
@@ -529,117 +532,20 @@ class CanvasRenderer {
     }
 
     drawTerrain() {
-        if (!this.terrain || !this.terrain.grid) {
-            console.log('No terrain data to render:', this.terrain);
+        if (!this.showTerrain || !this.terrain || !this.terrain.grid) {
             return;
         }
-        console.log('Drawing terrain with', this.terrain.grid_width, 'x', this.terrain.grid_height, 'cells');
 
-        const terrain = this.terrain;
-        const cellSize = terrain.cell_size * this.viewport.zoom;
-        const startX = -this.viewport.x * this.viewport.zoom;
-        const startY = -this.viewport.y * this.viewport.zoom;
-
-        // Only render visible cells for performance
-        const startGridX = Math.max(0, Math.floor(-startX / cellSize));
-        const startGridY = Math.max(0, Math.floor(-startY / cellSize));
-        const endGridX = Math.min(terrain.grid_width, Math.ceil((this.viewport.width - startX) / cellSize));
-        const endGridY = Math.min(terrain.grid_height, Math.ceil((this.viewport.height - startY) / cellSize));
-
-        // Draw terrain cells
-        for (let gy = startGridY; gy < endGridY; gy++) {
-            for (let gx = startGridX; gx < endGridX; gx++) {
-                if (gy < terrain.grid.length && gx < terrain.grid[gy].length) {
-                    const terrainType = terrain.grid[gy][gx];
-                    const terrainDef = terrain.terrain_definitions[terrainType];
-                    
-                    if (terrainDef && terrainType !== 'open') { // Don't draw open terrain (default background)
-                        const x = startX + gx * cellSize;
-                        const y = startY + gy * cellSize;
-                        
-                        // Set terrain color
-                        this.ctx.fillStyle = terrainDef.color;
-                        this.ctx.fillRect(x, y, cellSize, cellSize);
-                        
-                        // Add simple patterns based on terrain type
-                        if (this.viewport.zoom > 0.5) { // Only show patterns at higher zoom
-                            this.drawTerrainPattern(x, y, cellSize, terrainType);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    drawTerrainPattern(x, y, size, terrainType) {
-        this.ctx.save();
+        // Use the new AoE3-style terrain renderer
+        const cellSize = this.terrain.cell_size * this.viewport.zoom;
+        const viewport = {
+            x: this.viewport.x * this.viewport.zoom,
+            y: this.viewport.y * this.viewport.zoom,
+            width: this.viewport.width,
+            height: this.viewport.height
+        };
         
-        switch (terrainType) {
-            case 'forest':
-                // Draw simple dots for trees
-                this.ctx.fillStyle = '#1a3d1a';
-                const dotSize = Math.max(2, size * 0.1);
-                for (let i = 0; i < 3; i++) {
-                    for (let j = 0; j < 3; j++) {
-                        const dotX = x + (i + 0.5) * (size / 3);
-                        const dotY = y + (j + 0.5) * (size / 3);
-                        this.ctx.beginPath();
-                        this.ctx.arc(dotX, dotY, dotSize, 0, 2 * Math.PI);
-                        this.ctx.fill();
-                    }
-                }
-                break;
-                
-            case 'road':
-                // Draw road stripes
-                this.ctx.strokeStyle = '#ffffff';
-                this.ctx.lineWidth = Math.max(1, size * 0.05);
-                this.ctx.beginPath();
-                this.ctx.moveTo(x, y + size * 0.5);
-                this.ctx.lineTo(x + size, y + size * 0.5);
-                this.ctx.stroke();
-                break;
-                
-            case 'water':
-                // Draw wave pattern
-                this.ctx.strokeStyle = '#4a7bc8';
-                this.ctx.lineWidth = Math.max(1, size * 0.03);
-                for (let i = 0; i < 3; i++) {
-                    this.ctx.beginPath();
-                    const waveY = y + (i + 1) * (size / 4);
-                    this.ctx.moveTo(x, waveY);
-                    this.ctx.quadraticCurveTo(x + size * 0.25, waveY - size * 0.1, x + size * 0.5, waveY);
-                    this.ctx.quadraticCurveTo(x + size * 0.75, waveY + size * 0.1, x + size, waveY);
-                    this.ctx.stroke();
-                }
-                break;
-                
-            case 'ruins':
-                // Draw rubble pattern
-                this.ctx.fillStyle = '#5a3626';
-                for (let i = 0; i < 4; i++) {
-                    const rubbleX = x + Math.random() * size;
-                    const rubbleY = y + Math.random() * size;
-                    const rubbleSize = Math.max(1, size * 0.08);
-                    this.ctx.fillRect(rubbleX, rubbleY, rubbleSize, rubbleSize);
-                }
-                break;
-                
-            case 'minefield':
-                // Draw hazard stripes
-                this.ctx.strokeStyle = '#cc9900';
-                this.ctx.lineWidth = Math.max(1, size * 0.03);
-                for (let i = 0; i < 4; i++) {
-                    this.ctx.beginPath();
-                    const stripePos = i * (size / 4);
-                    this.ctx.moveTo(x + stripePos, y);
-                    this.ctx.lineTo(x + stripePos + size * 0.5, y + size);
-                    this.ctx.stroke();
-                }
-                break;
-        }
-        
-        this.ctx.restore();
+        this.terrainRenderer.renderTerrain(this.terrain, viewport, cellSize, this.showTerrain);
     }
 }
 

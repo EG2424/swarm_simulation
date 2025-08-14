@@ -16,10 +16,10 @@ class TerrainType(Enum):
     """Terrain type definitions"""
     OPEN = "open"
     FOREST = "forest"
-    RUINS = "ruins"
+    RUINS = "ruins"  # Urban/Ruins
     WATER = "water"
     ROAD = "road"
-    MINEFIELD = "minefield"
+    BRIDGE = "bridge"
 
 
 @dataclass
@@ -61,7 +61,7 @@ class TerrainGrid:
             TerrainType.OPEN.value: TerrainDefinition(
                 id=TerrainType.OPEN.value,
                 name="Open Ground",
-                color="#3a3a3a",  # Dark gray
+                color="#2c3e50",  # Modern dark blue-gray
                 move_cost=1.0,
                 blocked=False,
                 detect_mult=1.0,
@@ -71,7 +71,7 @@ class TerrainGrid:
             TerrainType.FOREST.value: TerrainDefinition(
                 id=TerrainType.FOREST.value,
                 name="Forest",
-                color="#2d5a2d",  # Deep green
+                color="#27ae60",  # Modern green
                 move_cost=1.5,
                 blocked=False,
                 detect_mult=0.7,
@@ -81,7 +81,7 @@ class TerrainGrid:
             TerrainType.RUINS.value: TerrainDefinition(
                 id=TerrainType.RUINS.value,
                 name="Ruins/Urban",
-                color="#8b4513",  # Reddish-brown
+                color="#95a5a6",  # Modern gray for ruins
                 move_cost=1.3,
                 blocked=False,
                 detect_mult=0.8,
@@ -91,7 +91,7 @@ class TerrainGrid:
             TerrainType.WATER.value: TerrainDefinition(
                 id=TerrainType.WATER.value,
                 name="Water",
-                color="#1e4a8c",  # Blue
+                color="#3498db",  # Modern bright blue
                 move_cost=999.0,  # Effectively blocked for tanks
                 blocked=True,
                 detect_mult=1.0,
@@ -101,22 +101,22 @@ class TerrainGrid:
             TerrainType.ROAD.value: TerrainDefinition(
                 id=TerrainType.ROAD.value,
                 name="Road",
-                color="#808080",  # Light gray
+                color="#34495e",  # Modern dark gray
                 move_cost=0.7,
                 blocked=False,
                 detect_mult=1.1,
                 los_blocks=False,
                 description="Road - faster movement, slightly better detection"
             ),
-            TerrainType.MINEFIELD.value: TerrainDefinition(
-                id=TerrainType.MINEFIELD.value,
-                name="Minefield",
-                color="#ffbf00",  # Amber
-                move_cost=2.0,
+            TerrainType.BRIDGE.value: TerrainDefinition(
+                id=TerrainType.BRIDGE.value,
+                name="Bridge",
+                color="#A9A9A9",  # Light gray, different from roads
+                move_cost=0.9,
                 blocked=False,
                 detect_mult=1.0,
                 los_blocks=False,
-                description="Dangerous minefield - very slow movement"
+                description="Bridge - allows passage over water"
             )
         }
     
