@@ -59,16 +59,16 @@ class Entity(ABC):
         # Update behavior
         self._update_behavior(dt, entities)
         
-        # Apply physics
-        self._update_physics(dt, arena_bounds, terrain)
+        # Apply physics with collision avoidance
+        self._update_physics(dt, arena_bounds, terrain, entities)
         
         # Update visual state
         self._update_visual_state()
         
         self.last_update = current_time
     
-    def _update_physics(self, dt: float, arena_bounds: Tuple[float, float], terrain=None):
-        """Apply unicycle kinematics and constraints"""
+    def _update_physics(self, dt: float, arena_bounds: Tuple[float, float], terrain=None, entities: Dict[str, 'Entity'] = None):
+        """Apply unicycle kinematics and constraints with collision avoidance"""
         # Skip physics updates for destroyed entities
         if self.destroyed:
             return
@@ -77,6 +77,10 @@ class Entity(ABC):
         speed = math.sqrt(self.velocity.x**2 + self.velocity.y**2)
         
         if speed > 0:
+            # Calculate new position
+            new_x = self.position.x
+            new_y = self.position.y
+            
             # Apply terrain movement cost
             effective_dt = dt
             if terrain:
@@ -87,12 +91,83 @@ class Entity(ABC):
                 if terrain.is_blocked(self.position.x, self.position.y, self.type.value):
                     effective_dt = 0  # Can't move at all
             
-            # Update position
-            self.position.x += self.velocity.x * effective_dt
-            self.position.y += self.velocity.y * effective_dt
-            
-            # Update heading based on velocity direction
-            self.heading = math.atan2(self.velocity.y, self.velocity.x)
+            if effective_dt > 0:
+                # Calculate proposed new position
+                new_x = self.position.x + self.velocity.x * effective_dt
+                new_y = self.position.y + self.velocity.y * effective_dt
+                
+                # Check for collisions with other entities
+                if entities:
+                    collision_detected = False
+                    for other_id, other_entity in entities.items():
+                        if other_id != self.id and not other_entity.destroyed:
+                            # Calculate distance to other entity at new position
+                            dx = new_x - other_entity.position.x
+                            dy = new_y - other_entity.position.y
+                            distance = math.sqrt(dx*dx + dy*dy)
+                            
+                            # Check collision (combined collision radii)
+                            min_distance = self.physics.collision_radius + other_entity.physics.collision_radius
+                            if distance < min_distance:
+                                collision_detected = True
+                                # Apply separation force to avoid overlap
+                                if distance > 0:
+                                    # Push away from other entity
+                                    push_strength = (min_distance - distance) / min_distance
+                                    push_x = (dx / distance) * push_strength * 2.0
+                                    push_y = (dy / distance) * push_strength * 2.0
+                                    new_x += push_x
+                                    new_y += push_y
+                                else:
+                                    # Entities are exactly on top of each other, random separation
+                                    angle = random.random() * 2 * math.pi
+                                    new_x += math.cos(angle) * min_distance
+                                    new_y += math.sin(angle) * min_distance
+                    
+                    # If collision detected, reduce movement to prevent overlap
+                    if collision_detected:
+                        # Blend between original movement and collision avoidance
+                        blend = 0.3  # How much of original movement to keep
+                        new_x = self.position.x * (1 - blend) + new_x * blend
+                        new_y = self.position.y * (1 - blend) + new_y * blend
+                
+                # Update position
+                self.position.x = new_x
+                self.position.y = new_y
+                
+                # Update heading based on velocity direction
+                self.heading = math.atan2(self.velocity.y, self.velocity.x)
+        
+        # Static collision resolution (even when not moving)
+        if entities:
+            for other_id, other_entity in entities.items():
+                if other_id != self.id and not other_entity.destroyed:
+                    # Calculate current distance
+                    dx = self.position.x - other_entity.position.x
+                    dy = self.position.y - other_entity.position.y
+                    distance = math.sqrt(dx*dx + dy*dy)
+                    
+                    # Check if entities are overlapping
+                    min_distance = self.physics.collision_radius + other_entity.physics.collision_radius
+                    if distance < min_distance:
+                        if distance > 0.1:  # Avoid division by zero
+                            # Calculate separation needed
+                            separation_needed = min_distance - distance
+                            # Each entity moves half the separation distance
+                            move_distance = separation_needed * 0.5
+                            
+                            # Normalize direction and apply separation
+                            dx_norm = dx / distance
+                            dy_norm = dy / distance
+                            
+                            # Move this entity away from the other
+                            self.position.x += dx_norm * move_distance
+                            self.position.y += dy_norm * move_distance
+                        else:
+                            # Entities are exactly on top of each other, random separation
+                            angle = random.random() * 2 * math.pi
+                            self.position.x += math.cos(angle) * min_distance * 0.5
+                            self.position.y += math.sin(angle) * min_distance * 0.5
         
         # Apply arena bounds
         width, height = arena_bounds
