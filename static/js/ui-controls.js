@@ -147,10 +147,10 @@ class UIControls {
             this.handleKeyPress(e);
         });
 
-        // Canvas context menu
-        window.addEventListener('canvas-rightclick', (e) => {
-            this.showContextMenu(e.detail.screenPos, e.detail.worldPos);
-        });
+        // Canvas context menu - disabled since direct commands are used
+        // window.addEventListener('canvas-rightclick', (e) => {
+        //     this.showContextMenu(e.detail.screenPos, e.detail.worldPos);
+        // });
 
         // Hide context menu on click elsewhere (but not on controls)
         document.addEventListener('click', (e) => {
