@@ -179,7 +179,6 @@ class CanvasRenderer {
     }
 
     updateTerrain(terrain) {
-        console.log('Updating terrain data:', terrain);
         this.terrain = terrain;
     }
 
@@ -246,9 +245,9 @@ class CanvasRenderer {
         this.ctx.translate(pos.x, pos.y);
         this.ctx.rotate(entity.heading);
         
-        // Draw patrol route BEFORE entity transformation (if enabled globally OR entity is selected) AND entity is in waypoint mode
+        // Draw patrol route BEFORE entity transformation (only for selected entities) AND entity is in waypoint mode
         const isInWaypointMode = entity.mode === 'waypoint_mode' || entity.mode === 'patrol_route';
-        if ((this.showPatrolRoutes || isSelected) && isInWaypointMode && entity.patrol_route && entity.patrol_route.length > 0) {
+        if (isSelected && isInWaypointMode && entity.patrol_route && entity.patrol_route.length > 0) {
             // Temporarily restore context to draw unrotated route
             this.ctx.restore();
             this.drawPatrolRoute(entity);
