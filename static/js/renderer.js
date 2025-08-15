@@ -55,7 +55,7 @@ class CanvasRenderer {
         this.lastClickTime = 0;
         this.lastClickEntity = null;
         this.doubleClickThreshold = 300; // ms
-        this.doubleClickRadius = 500; // pixels
+        this.doubleClickRadius = 100; // pixels (reduced from 500)
         
         // Path preview
         this.pathPreview = {
@@ -698,14 +698,14 @@ class CanvasRenderer {
         const clickedEntity = this.getEntityAtPosition(canvasX, canvasY);
         
         if (clickedEntity) {
-            // Right-clicked on entity - show context menu
-            this.handleCanvasRightClick(canvasX, canvasY, e.clientX, e.clientY);
+            // Right-clicked on entity - do nothing (could add entity-specific actions here)
+            return;
         } else if (this.selectedEntityIds.length > 0) {
             // Right-clicked on ground with units selected - move command
             this.handleMoveCommand(worldPos, e.ctrlKey);
         } else {
-            // Right-clicked with no selection - show context menu
-            this.handleCanvasRightClick(canvasX, canvasY, e.clientX, e.clientY);
+            // Right-clicked with no selection - do nothing
+            return;
         }
     }
 
