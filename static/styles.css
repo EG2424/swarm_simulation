@@ -78,6 +78,7 @@ body {
     display: flex;
     align-items: center;
     gap: 20px;
+    flex-wrap: wrap;
 }
 
 .control-group {
@@ -145,11 +146,14 @@ body {
     display: flex;
     flex: 1;
     overflow: hidden;
+    min-width: 0; /* Allow all children to shrink */
 }
 
 /* Sidebars */
 .sidebar {
+    min-width: 220px;
     width: 280px;
+    max-width: 320px;
     background: var(--bg-secondary);
     border-right: 1px solid var(--border);
     display: flex;
@@ -164,11 +168,14 @@ body {
 
 .right-sidebar {
     border-left: 1px solid var(--border);
+    flex-shrink: 0; /* Prevent right sidebar from shrinking too much */
 }
 
 .sidebar-section {
     padding: 16px;
     border-bottom: 1px solid var(--border);
+    min-width: 0; /* Allow content to shrink */
+    overflow: hidden; /* Prevent content overflow */
 }
 
 .section-title {
@@ -318,6 +325,8 @@ body {
     display: flex;
     flex-direction: column;
     position: relative;
+    min-width: 0; /* Allow canvas to shrink */
+    overflow: hidden; /* Prevent overflow */
 }
 
 .canvas-controls {
@@ -327,6 +336,8 @@ body {
     padding: 8px 16px;
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border);
+    flex-wrap: wrap; /* Allow wrapping on small screens */
+    min-width: 0; /* Allow shrinking */
 }
 
 .metrics-display {
@@ -340,6 +351,9 @@ body {
     flex: 1;
     background: var(--bg-primary);
     cursor: crosshair;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
 }
 
 .canvas-overlay {
@@ -363,6 +377,7 @@ body {
     pointer-events: all;
     box-shadow: 0 4px 12px var(--shadow);
     z-index: 1000;
+    max-width: 90vw; /* Ensure it doesn't go off screen */
 }
 
 .selection-header {
@@ -604,6 +619,8 @@ body {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    min-width: 0; /* Allow content to shrink */
+    overflow: hidden; /* Prevent content from overflowing */
 }
 
 .no-selection {
@@ -611,6 +628,8 @@ body {
     color: var(--text-muted);
     font-size: 12px;
     padding: 20px;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }
 
 .control-section {
@@ -1032,16 +1051,269 @@ input:checked + .toggle-slider:before {
     will-change: contents;
 }
 
-/* Responsive Adjustments */
-@media (max-width: 1200px) {
+/* Responsive Design for Different Laptop Sizes */
+
+/* Large laptops (1440px+) - Default styles apply */
+
+/* Standard laptops (1200px - 1439px) */
+@media (max-width: 1439px) {
+    .sidebar {
+        min-width: 160px;
+        width: 220px;
+        max-width: 260px;
+    }
+    
+    .right-sidebar {
+        min-width: 140px;
+        width: 200px;
+        max-width: 240px;
+    }
+    
+    .header-controls {
+        gap: 12px;
+    }
+    
+    .control-group {
+        gap: 6px;
+    }
+}
+
+/* Tablet/Very small laptop breakpoint (600px - 767px) */
+@media (max-width: 767px) and (min-width: 600px) {
+    .sidebar {
+        min-width: 120px;
+        width: 140px;
+        max-width: 160px;
+    }
+    
+    .sidebar-section {
+        padding: 4px;
+    }
+    
+    .section-title {
+        font-size: 10px;
+        margin-bottom: 4px;
+    }
+    
+    .control-panel {
+        font-size: 10px;
+        gap: 4px;
+    }
+    
+    .control-panel .control-btn {
+        padding: 2px 4px;
+        font-size: 8px;
+    }
+    
+    .right-sidebar {
+        min-width: 100px;
+        width: 120px;
+        max-width: 140px;
+        flex-shrink: 1;
+    }
+    
+    .entity-list {
+        max-height: 100px;
+    }
+    
+    .chat-messages {
+        max-height: 80px;
+    }
+}
+
+/* Compact laptops (1024px - 1199px) */
+@media (max-width: 1199px) {
+    .sidebar {
+        min-width: 140px;
+        width: 180px;
+        max-width: 220px;
+    }
+    
+    .right-sidebar {
+        min-width: 120px;
+        width: 160px;
+        max-width: 180px;
+    }
+    
+    .sidebar-section {
+        padding: 12px;
+    }
+    
     .button-group .control-btn {
         font-size: 10px;
         padding: 3px 5px;
+        min-width: 50px;
+    }
+    
+    .header {
+        padding: 10px 16px;
     }
     
     .waypoint-instructions {
         min-width: 200px;
         padding: 12px;
+    }
+    
+    .selection-info {
+        width: 220px;
+    }
+}
+
+/* Small laptops (768px - 1023px) */
+@media (max-width: 1023px) {
+    .sidebar {
+        min-width: 140px;
+        width: 160px;
+        max-width: 180px;
+    }
+    
+    .sidebar-section {
+        padding: 8px;
+    }
+    
+    .section-title {
+        font-size: 11px;
+        margin-bottom: 6px;
+    }
+    
+    .header {
+        padding: 8px 12px;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    
+    .header-controls {
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    
+    .canvas-controls {
+        padding: 6px 12px;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    
+    .control-btn {
+        padding: 6px 8px;
+        font-size: 11px;
+    }
+    
+    .selection-info {
+        width: 200px;
+        right: 10px;
+        top: 50px;
+        left: auto;
+        max-width: calc(100vw - 20px);
+    }
+    
+    .entity-list {
+        max-height: 150px;
+    }
+    
+    .chat-messages {
+        max-height: 120px;
+    }
+    
+    .control-panel {
+        gap: 6px;
+        font-size: 11px;
+    }
+    
+    .control-panel .control-btn {
+        padding: 3px 5px;
+        font-size: 9px;
+    }
+    
+    /* Make right sidebar more compact */
+    .right-sidebar .sidebar-section {
+        padding: 6px;
+    }
+    
+    /* Ensure Control Panel doesn't get cut off */
+    .right-sidebar {
+        min-width: 100px;
+        width: 120px;
+        max-width: 140px;
+        flex-shrink: 1;
+    }
+}
+
+/* Very compact (below 768px) - Stack layout */
+@media (max-width: 767px) {
+    .main-content {
+        flex-direction: column;
+    }
+    
+    .sidebar {
+        width: 100%;
+        min-width: auto;
+        max-width: none;
+        height: auto;
+        max-height: 200px;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+    }
+    
+    .right-sidebar {
+        border-left: none;
+        border-top: 1px solid var(--border);
+        order: 4;
+    }
+    
+    .canvas-container {
+        order: 2;
+        min-height: 400px;
+    }
+    
+    .header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+    
+    .header-left {
+        justify-content: center;
+    }
+    
+    .header-controls {
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    
+    .selection-info {
+        position: relative;
+        width: 100%;
+        right: auto;
+        top: auto;
+        margin: 10px;
+    }
+    
+    .entity-list,
+    .chat-messages {
+        max-height: 120px;
+    }
+    
+    .sidebar-section {
+        padding: 8px;
+    }
+    
+    .control-panel {
+        gap: 6px;
+        font-size: 11px;
+    }
+    
+    .control-panel .control-btn {
+        padding: 3px 5px;
+        font-size: 9px;
+        min-width: auto;
+    }
+}
+
+/* Simple responsive behavior - only at very small sizes */
+@media (max-width: 900px) {
+    .sidebar {
+        min-width: 180px;
+        width: 220px;
     }
 }
 
