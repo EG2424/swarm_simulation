@@ -44,6 +44,7 @@ class Entity(ABC):
         self.target_entity_id: Optional[str] = None
         self.patrol_route: List[Vector2D] = []
         self.current_waypoint = 0
+        self.arrived_at_destination = False  # Prevents oscillation at single waypoints
         
         # Rendering
         self.color = "#FFFFFF"
@@ -246,6 +247,7 @@ class Entity(ABC):
             "target_entity_id": self.target_entity_id,
             "patrol_route": [{"x": p.x, "y": p.y} for p in self.patrol_route],
             "current_waypoint": self.current_waypoint,
+            "arrived_at_destination": getattr(self, 'arrived_at_destination', False),
             "mode": self.mode.value if hasattr(self.mode, 'value') else str(self.mode),
             "status": getattr(self, 'status', 'unknown')
         }
@@ -410,11 +412,25 @@ class Drone(Entity):
             self.stop()
             self.status = "idle"
             return
+        
+        # Check if already arrived at single waypoint destination
+        if self.arrived_at_destination and len(self.patrol_route) == 1:
+            self.stop()
+            self.status = "arrived"
+            return
             
         current_target = self.patrol_route[self.current_waypoint]
         if self.distance_to_point(current_target) <= 5.0:
-            self.current_waypoint = (self.current_waypoint + 1) % len(self.patrol_route)
-            current_target = self.patrol_route[self.current_waypoint]
+            # For single waypoint, stop at destination to prevent wobbling
+            if len(self.patrol_route) == 1:
+                self.stop()
+                self.status = "arrived"
+                self.arrived_at_destination = True
+                return
+            else:
+                # Multiple waypoints: cycle through them
+                self.current_waypoint = (self.current_waypoint + 1) % len(self.patrol_route)
+                current_target = self.patrol_route[self.current_waypoint]
         
         self.move_towards(current_target)
         self.status = "patrolling"
@@ -526,6 +542,7 @@ class Drone(Entity):
             if waypoint_route is not None:
                 self.patrol_route = waypoint_route
             self.current_waypoint = 0
+            self.arrived_at_destination = False  # Reset arrival flag for new waypoints
 
 
 class Tank(Entity):
@@ -587,11 +604,25 @@ class Tank(Entity):
         if not self.patrol_route:
             self.stop()
             return
+        
+        # Check if already arrived at single waypoint destination
+        if self.arrived_at_destination and len(self.patrol_route) == 1:
+            self.stop()
+            self.status = "arrived"
+            return
             
         current_target = self.patrol_route[self.current_waypoint]
         if self.distance_to_point(current_target) <= 3.0:
-            self.current_waypoint = (self.current_waypoint + 1) % len(self.patrol_route)
-            current_target = self.patrol_route[self.current_waypoint]
+            # For single waypoint, stop at destination to prevent wobbling
+            if len(self.patrol_route) == 1:
+                self.stop()
+                self.status = "arrived"
+                self.arrived_at_destination = True
+                return
+            else:
+                # Multiple waypoints: cycle through them
+                self.current_waypoint = (self.current_waypoint + 1) % len(self.patrol_route)
+                current_target = self.patrol_route[self.current_waypoint]
         
         self.move_towards(current_target, self.physics.max_speed * 0.6)
         self.status = "patrolling"
@@ -665,3 +696,4 @@ class Tank(Entity):
             if waypoint_route is not None:
                 self.patrol_route = waypoint_route
             self.current_waypoint = 0
+            self.arrived_at_destination = False  # Reset arrival flag for new waypoints
