@@ -222,11 +222,8 @@ class SimulationEngine:
     
     def spawn_entity(self, request: SpawnEntityRequest) -> Entity:
         """Spawn new entity with terrain validation"""
-        logger.info(f"Attempting to spawn {request.type.value} at ({request.position.x}, {request.position.y})")
-        
         # Validate spawn position based on entity type
         is_valid = self._is_valid_spawn_position(request.position.x, request.position.y, request.type)
-        logger.info(f"Spawn position validation result: {is_valid}")
         
         if not is_valid:
             logger.info(f"Invalid spawn position, searching for alternative...")
@@ -239,7 +236,6 @@ class SimulationEngine:
                 logger.error(error_msg)
                 raise ValueError(error_msg)
             
-            logger.info(f"Adjusted spawn position for {request.type.value} from ({request.position.x}, {request.position.y}) to ({valid_position[0]}, {valid_position[1]})")
             request.position.x, request.position.y = valid_position
         
         entity_id = str(uuid.uuid4())
@@ -257,8 +253,6 @@ class SimulationEngine:
         
         self.entities[entity_id] = entity
         self.total_spawned += 1
-        
-        logger.info(f"Spawned {request.type.value} {entity_id} at ({request.position.x}, {request.position.y})")
         
         return entity
     
@@ -523,8 +517,6 @@ class SimulationEngine:
     
     def _is_valid_spawn_position(self, x: float, y: float, entity_type: EntityType) -> bool:
         """Check if a position is valid for spawning the given entity type"""
-        logger.info(f"=== SPAWN VALIDATION START for {entity_type.value} at ({x}, {y}) ===")
-        
         # Check if terrain system is initialized
         if not self.terrain:
             logger.error("ERROR: Terrain system not initialized!")
@@ -532,7 +524,6 @@ class SimulationEngine:
         
         # Check arena bounds
         if x < 0 or y < 0 or x >= self.arena_bounds[0] or y >= self.arena_bounds[1]:
-            logger.info(f"REJECTED: Position ({x}, {y}) is out of arena bounds ({self.arena_bounds})")
             return False
         
         # Check terrain constraints
@@ -546,29 +537,19 @@ class SimulationEngine:
         if entity_type == EntityType.TANK:
             try:
                 # Get the terrain at this position
-                logger.info(f"Checking terrain for tank at ({x}, {y})")
                 terrain_info = self.terrain.get_terrain_at(x, y)
                 is_blocked = self.terrain.is_blocked(x, y, entity_type_str)
                 move_cost = self.terrain.get_movement_cost(x, y, entity_type_str)
                 
-                logger.info(f"  Terrain type: {terrain_info.id}")
-                logger.info(f"  Is blocked: {is_blocked}")
-                logger.info(f"  Move cost: {move_cost}")
-                logger.info(f"  Terrain blocked flag: {terrain_info.blocked}")
-                
                 if is_blocked:
-                    logger.info(f"REJECTED: Position ({x}, {y}) is blocked for tanks")
                     return False
                 
                 # Also check if terrain has very high movement cost (effectively impassable)
                 if move_cost > 5.0:  # Arbitrary threshold for "too difficult to spawn in"
-                    logger.info(f"REJECTED: Position ({x}, {y}) has high move cost {move_cost} for tanks")
                     return False
                     
-                logger.info(f"Terrain check PASSED for tank at ({x}, {y})")
             except Exception as e:
                 logger.error(f"ERROR during terrain check: {e}")
-                logger.info(f"REJECTED: Terrain check failed with error")
                 return False
         
         # Check for collision with existing entities
@@ -577,10 +558,8 @@ class SimulationEngine:
             if not entity.destroyed:
                 distance = math.sqrt((x - entity.position.x)**2 + (y - entity.position.y)**2)
                 if distance < collision_radius:
-                    logger.info(f"REJECTED: Position ({x}, {y}) too close to existing entity {entity.id}")
                     return False
         
-        logger.info(f"=== SPAWN VALIDATION RESULT: APPROVED for {entity_type.value} at ({x}, {y}) ===")
         return True
     
     def _find_nearest_valid_spawn_position(self, x: float, y: float, entity_type: EntityType, max_search_radius: float = 100.0) -> Optional[Tuple[float, float]]:

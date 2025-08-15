@@ -128,8 +128,7 @@ class UIControls {
         document.getElementById('filter-destroyed').addEventListener('change', () => {
             const entities = window.renderer?.entities || [];
             const destroyedCount = entities.filter(e => e.destroyed).length;
-            console.log(`Destroyed filter toggled. Total entities: ${entities.length}, Destroyed: ${destroyedCount}`);
-            console.log('Destroyed entities:', entities.filter(e => e.destroyed));
+            // Destroyed filter toggled
             this.updateEntityList(entities);
         });
 
@@ -343,8 +342,6 @@ class UIControls {
         const showTanks = document.getElementById('filter-tanks').checked;
         const showDestroyed = document.getElementById('filter-destroyed').checked;
         
-        console.log(`updateEntityList: entities=${entities.length}, showDrones=${showDrones}, showTanks=${showTanks}, showDestroyed=${showDestroyed}`);
-        
         // Filter entities first
         const filteredEntities = entities.filter(entity => {
             // If showing destroyed, show all destroyed entities regardless of type
@@ -363,9 +360,6 @@ class UIControls {
             
             return true;
         });
-        
-        console.log(`Filtered ${entities.length} entities down to ${filteredEntities.length}`);
-        console.log('Filtered entities:', filteredEntities.map(e => `${e.type}-${e.id.substring(0,8)} (destroyed: ${e.destroyed})`));
         
         // Check if the list actually needs updating
         const currentItems = entityList.querySelectorAll('.entity-item');
@@ -494,6 +488,9 @@ class UIControls {
 
     showContextMenu(screenPos, worldPos) {
         const contextMenu = document.getElementById('context-menu');
+        if (!contextMenu) {
+            return; // Context menu is disabled
+        }
         
         // Position the context menu at the exact mouse position
         contextMenu.style.position = 'fixed';
@@ -533,7 +530,10 @@ class UIControls {
     }
 
     hideContextMenu() {
-        document.getElementById('context-menu').classList.add('hidden');
+        const contextMenu = document.getElementById('context-menu');
+        if (contextMenu) {
+            contextMenu.classList.add('hidden');
+        }
     }
 
     handleContextAction(action, worldPos) {

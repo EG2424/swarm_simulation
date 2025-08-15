@@ -14,8 +14,6 @@ class LLMSwarmApp {
     }
 
     async init() {
-        console.log('Initializing LLM Swarm Application...');
-        
         try {
             // Wait for DOM to be ready
             if (document.readyState === 'loading') {
@@ -35,7 +33,6 @@ class LLMSwarmApp {
             await this.loadScenarios();
             
             this.isInitialized = true;
-            console.log('Application initialized successfully');
             
             // Show welcome message
             if (window.chatSystem) {
@@ -49,36 +46,26 @@ class LLMSwarmApp {
     }
 
     initializeComponents() {
-        console.log('Initializing components...');
-        
         // Initialize renderer
         window.renderer = new CanvasRenderer('simulation-canvas');
-        console.log('✓ Canvas renderer initialized');
         
         // Initialize UI controls
         window.uiControls = new UIControls();
-        console.log('✓ UI controls initialized');
         
         // Initialize entity controls
         window.entityControls = new EntityControls();
-        console.log('✓ Entity controls initialized');
         
         // Initialize chat system
         window.chatSystem = new ChatSystem();
-        console.log('✓ Chat system initialized');
         
         // Setup global error handling
         this.setupErrorHandling();
-        console.log('✓ Error handling setup');
         
         // Setup performance monitoring
         this.setupPerformanceMonitoring();
-        console.log('✓ Performance monitoring setup');
     }
 
     async connectWebSocket() {
-        console.log('Connecting to WebSocket...');
-        
         return new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
                 reject(new Error('WebSocket connection timeout'));
@@ -87,7 +74,6 @@ class LLMSwarmApp {
             const handleConnection = () => {
                 clearTimeout(timeout);
                 window.removeEventListener('ws-connected', handleConnection);
-                console.log('✓ WebSocket connected');
                 resolve();
             };
             
@@ -107,8 +93,6 @@ class LLMSwarmApp {
     }
 
     startRenderLoop() {
-        console.log('Starting render loop...');
-        
         const render = (currentTime) => {
             if (currentTime - this.lastRenderTime >= this.frameInterval) {
                 if (window.renderer) {
@@ -121,20 +105,14 @@ class LLMSwarmApp {
         };
         
         this.animationFrameId = requestAnimationFrame(render);
-        console.log('✓ Render loop started');
     }
 
     async loadScenarios() {
-        console.log('Loading available scenarios...');
-        
         try {
             const response = await fetch('/api/scenarios');
             if (response.ok) {
                 const data = await response.json();
                 this.populateScenarioSelector(data.scenarios);
-                console.log(`✓ Loaded ${data.scenarios.length} scenarios`);
-            } else {
-                console.warn('Failed to load scenarios');
             }
         } catch (error) {
             console.warn('Error loading scenarios:', error);
@@ -142,7 +120,6 @@ class LLMSwarmApp {
     }
 
     populateScenarioSelector(scenarios) {
-        console.log('Populating scenario selector with scenarios:', scenarios);
         const select = document.getElementById('scenario-select');
         if (!select) {
             console.error('Scenario select element not found!');
@@ -156,7 +133,6 @@ class LLMSwarmApp {
         
         // Add scenario options
         for (const scenario of scenarios) {
-            console.log('Adding scenario option:', scenario);
             const option = document.createElement('option');
             option.value = scenario.name;
             option.textContent = scenario.title || scenario.name;
