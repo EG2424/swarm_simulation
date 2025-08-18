@@ -10,6 +10,9 @@ class LLMSwarmApp {
         this.targetFPS = 60;
         this.frameInterval = 1000 / this.targetFPS;
         
+        // Store simulation state for mode switching
+        this.lastSimulationState = null;
+        
         this.init();
     }
 
@@ -21,7 +24,7 @@ class LLMSwarmApp {
             }
             
             // Initialize core components
-            this.initializeComponents();
+            await this.initializeComponents();
             
             // Start WebSocket connection
             await this.connectWebSocket();
@@ -45,24 +48,44 @@ class LLMSwarmApp {
         }
     }
 
-    initializeComponents() {
-        // Initialize renderer
-        window.renderer = new CanvasRenderer('simulation-canvas');
-        
-        // Initialize UI controls
-        window.uiControls = new UIControls();
-        
-        // Initialize entity controls
-        window.entityControls = new EntityControls();
-        
-        // Initialize chat system
-        window.chatSystem = new ChatSystem();
-        
-        // Setup global error handling
-        this.setupErrorHandling();
-        
-        // Setup performance monitoring
-        this.setupPerformanceMonitoring();
+    async initializeComponents() {
+        try {
+            // Initialize mode manager (handles 2D/3D switching)
+            window.modeManager = new ModeManager();
+            await window.modeManager.init();
+            
+            // Initialize UI controls
+            window.uiControls = new UIControls();
+            
+            // Initialize entity controls
+            window.entityControls = new EntityControls();
+            
+            // Initialize chat system
+            window.chatSystem = new ChatSystem();
+            
+            // Setup global error handling
+            this.setupErrorHandling();
+            
+            // Setup performance monitoring
+            this.setupPerformanceMonitoring();
+            
+        } catch (error) {
+            console.error('Error in initializeComponents:', error);
+            
+            // Fallback: Initialize just the 2D renderer
+            console.log('Falling back to 2D-only mode...');
+            try {
+                window.renderer = new CanvasRenderer('simulation-canvas');
+                window.uiControls = new UIControls();
+                window.entityControls = new EntityControls();
+                window.chatSystem = new ChatSystem();
+                this.setupErrorHandling();
+                this.setupPerformanceMonitoring();
+            } catch (fallbackError) {
+                console.error('Fallback initialization also failed:', fallbackError);
+                throw fallbackError;
+            }
+        }
     }
 
     async connectWebSocket() {
@@ -95,8 +118,10 @@ class LLMSwarmApp {
     startRenderLoop() {
         const render = (currentTime) => {
             if (currentTime - this.lastRenderTime >= this.frameInterval) {
-                if (window.renderer) {
-                    window.renderer.render();
+                // Render with active renderer (2D or 3D)
+                const activeRenderer = window.modeManager ? window.modeManager.getActiveRenderer() : window.renderer;
+                if (activeRenderer) {
+                    activeRenderer.render();
                 }
                 this.lastRenderTime = currentTime;
             }

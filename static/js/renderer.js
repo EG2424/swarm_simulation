@@ -21,7 +21,7 @@ class CanvasRenderer {
         this.entityScale = 1.0;
         this.showDetectionRanges = false;
         this.showPatrolRoutes = true;  // Show patrol routes for waypoint system
-        this.showSelectionOutlines = true;
+        this.showSelectionOutlines = false;
         this.showTerrain = true;
         
         // Colors
@@ -768,6 +768,7 @@ class CanvasRenderer {
         
         this.dragSelection.currentX = screenX;
         this.dragSelection.currentY = screenY;
+        this.dragSelection.lastUpdate = Date.now(); // Reset timeout
     }
     
     completeDragSelection(shiftKey) {
@@ -860,6 +861,15 @@ class CanvasRenderer {
     
     drawSelectionBox() {
         if (!this.dragSelection.active) return;
+        
+        // Failsafe: If drag selection has been active for too long without mouse movement, clear it
+        if (!this.dragSelection.lastUpdate) {
+            this.dragSelection.lastUpdate = Date.now();
+        } else if (Date.now() - this.dragSelection.lastUpdate > 5000) {
+            console.warn('Clearing stuck drag selection');
+            this.dragSelection.active = false;
+            return;
+        }
         
         const startX = this.dragSelection.startX;
         const startY = this.dragSelection.startY;
@@ -967,6 +977,33 @@ class CanvasRenderer {
         };
         
         this.terrainRenderer.renderTerrain(this.terrain, viewport, cellSize, this.showTerrain);
+    }
+    
+    // Reset method for simulation resets
+    reset() {
+        console.log('Resetting 2D renderer...');
+        
+        try {
+            // Clear entities
+            this.entities = [];
+            this.selectedEntityIds = [];
+            
+            // Reset camera/viewport to default
+            this.viewport.x = 0;
+            this.viewport.y = 0;
+            this.viewport.zoom = 1.0;
+            
+            // Clear terrain
+            this.terrain = null;
+            
+            // Clear any stuck selection states
+            this.dragSelection.active = false;
+            this.pathPreview.active = false;
+            
+            console.log('2D renderer reset complete');
+        } catch (error) {
+            console.error('Error during 2D renderer reset:', error);
+        }
     }
 }
 

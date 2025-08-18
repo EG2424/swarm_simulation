@@ -60,9 +60,11 @@ class UIControls {
         
         zoomSlider.addEventListener('input', (e) => {
             this.zoom = parseFloat(e.target.value);
-            zoomDisplay.textContent = `${Math.round(this.zoom * 100)}%`;
-            if (window.renderer) {
+            if (window.modeManager) {
+                window.modeManager.handleZoomChange(this.zoom);
+            } else if (window.renderer) {
                 window.renderer.setZoom(this.zoom);
+                zoomDisplay.textContent = `${Math.round(this.zoom * 100)}%`;
             }
         });
 
@@ -73,28 +75,36 @@ class UIControls {
         entityScaleSlider.addEventListener('input', (e) => {
             this.entityScale = parseFloat(e.target.value);
             entityScaleDisplay.textContent = `${Math.round(this.entityScale * 100)}%`;
-            if (window.renderer) {
+            if (window.modeManager) {
+                window.modeManager.handleEntityScaleChange(this.entityScale);
+            } else if (window.renderer) {
                 window.renderer.setEntityScale(this.entityScale);
             }
         });
 
         // Detection ranges toggle
         document.getElementById('show-detection-ranges').addEventListener('change', (e) => {
-            if (window.renderer) {
+            if (window.modeManager) {
+                window.modeManager.handleDetectionRangesToggle(e.target.checked);
+            } else if (window.renderer) {
                 window.renderer.setShowDetectionRanges(e.target.checked);
             }
         });
 
         // Terrain toggle
         document.getElementById('show-terrain').addEventListener('change', (e) => {
-            if (window.renderer) {
+            if (window.modeManager) {
+                window.modeManager.handleTerrainToggle(e.target.checked);
+            } else if (window.renderer) {
                 window.renderer.setShowTerrain(e.target.checked);
             }
         });
 
         // Patrol routes toggle
         document.getElementById('show-patrol-routes').addEventListener('change', (e) => {
-            if (window.renderer) {
+            if (window.modeManager) {
+                window.modeManager.handlePatrolRoutesToggle(e.target.checked);
+            } else if (window.renderer) {
                 window.renderer.setShowPatrolRoutes(e.target.checked);
             }
         });
@@ -201,6 +211,11 @@ class UIControls {
                 this.simulationState = data.state;
                 this.updateSimulationStatusDisplay();
                 console.log(`Server confirmed state change to: ${data.state}`);
+                
+                // Handle reset specifically
+                if (data.action === 'reset' || data.state === 'stopped') {
+                    this.handleSimulationReset();
+                }
             }
         });
 
@@ -283,14 +298,26 @@ class UIControls {
         this.updateMetricsDisplay(data);
         this.updateEntityList(data.entities);
         
-        // Update renderer
-        if (window.renderer && data.entities) {
-            window.renderer.updateEntities(data.entities, data.selected_entities);
+        // Update renderer (both 2D and 3D)
+        if (data.entities) {
+            // Store simulation state for mode switching
+            if (window.app) {
+                window.app.lastSimulationState = data;
+            }
+            
+            // Update active renderer
+            const activeRenderer = window.modeManager ? window.modeManager.getActiveRenderer() : window.renderer;
+            if (activeRenderer) {
+                activeRenderer.updateEntities(data.entities, data.selected_entities);
+            }
         }
         
         // Update terrain
-        if (window.renderer && data.terrain) {
-            window.renderer.updateTerrain(data.terrain);
+        if (data.terrain) {
+            const activeRenderer = window.modeManager ? window.modeManager.getActiveRenderer() : window.renderer;
+            if (activeRenderer && activeRenderer.updateTerrain) {
+                activeRenderer.updateTerrain(data.terrain);
+            }
         }
     }
 
@@ -630,6 +657,29 @@ class UIControls {
         // Show disconnection indicator
         this.simulationState = 'disconnected';
         this.updateSimulationStatusDisplay();
+    }
+    
+    handleSimulationReset() {
+        console.log('Handling simulation reset...');
+        
+        try {
+            // Reset mode manager and renderers
+            if (window.modeManager && typeof window.modeManager.reset === 'function') {
+                window.modeManager.reset();
+            }
+            
+            // Reset 2D renderer if it exists independently
+            if (window.renderer && typeof window.renderer.reset === 'function') {
+                window.renderer.reset();
+            }
+            
+            // Clear entity list
+            this.updateEntityList([]);
+            
+            console.log('Simulation reset handling complete');
+        } catch (error) {
+            console.error('Error handling simulation reset:', error);
+        }
     }
 }
 
