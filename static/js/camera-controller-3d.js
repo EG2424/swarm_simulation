@@ -30,6 +30,7 @@ class CameraController3D {
         this.lastMousePos = { x: 0, y: 0 };
         this.keys = new Set();
         this.flyMode = false;
+        this.externalControl = false; // Initialize external control state
         
         // Fly mode state
         this.flyVelocity = new THREE.Vector3();
@@ -81,6 +82,18 @@ class CameraController3D {
     }
     
     onMouseDown(e) {
+        // Don't handle mouse events if external control is active (Alt+drag or selection)
+        if (this.isExternalControlled()) {
+            e.stopPropagation();
+            return;
+        }
+        
+        // IMPORTANT: Only handle mouse events when Alt is pressed
+        if (!e.altKey) {
+            e.stopPropagation();
+            return;
+        }
+        
         this.isDragging = true;
         this.dragButton = e.button;
         this.lastMousePos = { x: e.clientX, y: e.clientY };
@@ -90,7 +103,18 @@ class CameraController3D {
     }
     
     onMouseMove(e) {
-        if (!this.isDragging) return;
+        if (!this.isDragging || this.isExternalControlled()) {
+            if (this.isExternalControlled()) {
+                e.stopPropagation();
+            }
+            return;
+        }
+        
+        // Only handle mouse move when Alt is pressed
+        if (!e.altKey) {
+            e.stopPropagation();
+            return;
+        }
         
         const deltaX = e.clientX - this.lastMousePos.x;
         const deltaY = e.clientY - this.lastMousePos.y;
@@ -100,13 +124,28 @@ class CameraController3D {
         if (this.flyMode) {
             this.handleFlyMouseMove(deltaX, deltaY);
         } else {
-            this.handleOrbitMouseMove(deltaX, deltaY);
+            this.handleOrbitMouseMoveWithButton(deltaX, deltaY);
         }
         
         e.preventDefault();
     }
     
     onMouseUp(e) {
+        if (this.isExternalControlled()) {
+            e.stopPropagation();
+            return;
+        }
+        
+        // Only handle mouse up when Alt is pressed (or was pressed during drag)
+        if (!e.altKey && this.isDragging) {
+            // Alt was released during drag - stop camera movement
+            this.isDragging = false;
+            this.dragButton = -1;
+            this.canvas.style.cursor = 'default';
+            e.stopPropagation();
+            return;
+        }
+        
         this.isDragging = false;
         this.dragButton = -1;
         this.canvas.style.cursor = 'default';
@@ -154,6 +193,14 @@ class CameraController3D {
     }
     
     handleOrbitMouseMove(deltaX, deltaY) {
+        const sensitivity = this.config.mouseSensitivity;
+        
+        // Direct orbit control (used by Alt+drag)
+        this.sphericalDelta.theta -= deltaX * sensitivity;
+        this.sphericalDelta.phi -= deltaY * sensitivity;
+    }
+    
+    handleOrbitMouseMoveWithButton(deltaX, deltaY) {
         const sensitivity = this.config.mouseSensitivity;
         
         switch (this.dragButton) {
@@ -370,6 +417,15 @@ class CameraController3D {
         
         // Reset deltas
         this.sphericalDelta.set(0, 0, 0);
+    }
+    
+    // Control methods for external event handling
+    setExternalControl(enabled) {
+        this.externalControl = enabled;
+    }
+    
+    isExternalControlled() {
+        return this.externalControl || false;
     }
     
     // Public API methods

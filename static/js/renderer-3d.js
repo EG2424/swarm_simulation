@@ -29,6 +29,37 @@ class Renderer3D {
         this.showPatrolRoutes = true;
         this.showTerrain = true;
         
+        // AoE3-style interaction state
+        this.dragSelection = {
+            active: false,
+            startX: 0,
+            startY: 0,
+            currentX: 0,
+            currentY: 0,
+            shiftKey: false
+        };
+        
+        // Camera control state
+        this.cameraControl = {
+            active: false,
+            mode: null, // 'orbit' or 'pan'
+            startX: 0,
+            startY: 0,
+            lastX: 0,
+            lastY: 0
+        };
+        
+        // Double-click detection
+        this.lastClickTime = 0;
+        this.lastClickEntity = null;
+        this.doubleClickThreshold = 300; // ms
+        this.doubleClickRadius = 100; // world units
+        
+        // Key state tracking
+        this.keys = {
+            altPressed: false
+        };
+        
         // Entity management
         this.entities = [];
         this.selectedEntityIds = [];
@@ -355,20 +386,46 @@ class Renderer3D {
             this.handleResize();
         });
         
-        // Handle mouse events for selection
+        // AoE3-style mouse events - use capture phase to handle before camera controller
+        this.canvas.addEventListener('mousedown', (e) => {
+            this.handleMouseDown(e);
+        }, true); // true = capture phase
+        
+        this.canvas.addEventListener('mousemove', (e) => {
+            this.handleMouseMove(e);
+        }, true); // true = capture phase
+        
+        this.canvas.addEventListener('mouseup', (e) => {
+            this.handleMouseUp(e);
+        }, true); // true = capture phase
+        
         this.canvas.addEventListener('click', (e) => {
-            if (!this.cameraController.isDragging) {
+            if (!this.dragSelection.active && !this.cameraControl.active) {
                 this.handleCanvasClick(e);
             }
         });
         
-        this.canvas.addEventListener('mousemove', (e) => {
-            this.handleMouseMove(e);
+        this.canvas.addEventListener('dblclick', (e) => {
+            this.handleDoubleClick(e);
+        });
+        
+        this.canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            this.handleRightClick(e);
         });
         
         // Keyboard controls
         document.addEventListener('keydown', (e) => {
             this.handleKeyDown(e);
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            this.handleKeyUp(e);
+        });
+        
+        // Prevent text selection while dragging
+        this.canvas.addEventListener('selectstart', (e) => {
+            e.preventDefault();
         });
     }
     
@@ -382,59 +439,412 @@ class Renderer3D {
         this.renderer.setSize(width, height);
     }
     
-    handleCanvasClick(e) {
+    // AoE3-style mouse event handlers
+    handleMouseDown(e) {
         const rect = this.canvas.getBoundingClientRect();
-        const mouse = new THREE.Vector2(
-            ((e.clientX - rect.left) / rect.width) * 2 - 1,
-            -((e.clientY - rect.top) / rect.height) * 2 + 1
-        );
+        const screenX = e.clientX - rect.left;
+        const screenY = e.clientY - rect.top;
         
-        this.raycaster.setFromCamera(mouse, this.camera);
-        
-        // Check for entity intersections first
-        const entityMeshes = Array.from(this.entityMeshes.values());
-        const entityIntersects = this.raycaster.intersectObjects(entityMeshes);
-        
-        if (entityIntersects.length > 0) {
-            // Entity clicked
-            const clickedMesh = entityIntersects[0].object;
-            const entityId = this.getEntityIdFromMesh(clickedMesh);
-            if (entityId) {
-                this.handleEntityClick(entityId, e.shiftKey);
+        if (e.altKey) {
+            // Alt held = Camera control mode
+            this.startCameraControl(e, screenX, screenY);
+        } else if (e.button === 0) {
+            // Left mouse without Alt = Unit selection
+            const clickedEntity = this.getEntityAtPosition(screenX, screenY);
+            
+            if (clickedEntity) {
+                // Entity clicked - handle selection
+                this.handleEntityClick(clickedEntity.id, e.shiftKey);
+            } else {
+                // Empty space clicked - start drag selection
+                this.startDragSelection(screenX, screenY, e.shiftKey);
             }
+            
+            // Prevent camera controller from handling this event
+            e.preventDefault();
+            e.stopPropagation();
         } else {
-            // Terrain clicked - for movement commands
-            const terrainIntersects = this.raycaster.intersectObject(this.terrainMesh);
-            if (terrainIntersects.length > 0) {
-                const worldPos = terrainIntersects[0].point;
-                this.handleTerrainClick(worldPos, e.ctrlKey);
+            // For non-left clicks without Alt, allow camera controller to handle
+            return;
+        }
+        
+        e.preventDefault();
+    }
+    
+    handleMouseMove(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const screenX = e.clientX - rect.left;
+        const screenY = e.clientY - rect.top;
+        
+        if (this.cameraControl.active) {
+            // Alt+drag = Camera movement
+            this.updateCameraControl(e, screenX, screenY);
+            e.preventDefault();
+            e.stopPropagation();
+        } else if (this.dragSelection.active) {
+            // Normal drag = Selection box
+            this.updateDragSelection(screenX, screenY);
+            e.preventDefault();
+            e.stopPropagation();
+        } else {
+            // Handle cursor and hover effects
+            this.handleCanvasMouseMove(screenX, screenY);
+        }
+    }
+    
+    handleMouseUp(e) {
+        if (this.cameraControl.active) {
+            this.endCameraControl();
+        } else if (this.dragSelection.active) {
+            this.completeDragSelection(e.shiftKey);
+        }
+        
+        // Prevent event propagation to camera controller
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    
+    handleCanvasClick(e) {
+        // This is called for single clicks that aren't part of drag operations
+        const rect = this.canvas.getBoundingClientRect();
+        const screenX = e.clientX - rect.left;
+        const screenY = e.clientY - rect.top;
+        
+        // For click events that weren't handled by mousedown/up
+        if (!e.altKey && e.button === 0) {
+            const clickedEntity = this.getEntityAtPosition(screenX, screenY);
+            if (!clickedEntity) {
+                // Clear selection on empty click (if not shift)
+                if (!e.shiftKey && this.selectedEntityIds.length > 0) {
+                    for (const entityId of this.selectedEntityIds) {
+                        if (window.wsManager) {
+                            window.wsManager.selectEntity(entityId, false, false);
+                        }
+                    }
+                }
             }
         }
     }
     
-    handleMouseMove(e) {
-        // Handle hover effects and tooltips
+    handleDoubleClick(e) {
+        if (e.altKey) return; // Ignore in camera mode
+        
         const rect = this.canvas.getBoundingClientRect();
+        const screenX = e.clientX - rect.left;
+        const screenY = e.clientY - rect.top;
+        
+        const clickedEntity = this.getEntityAtPosition(screenX, screenY);
+        if (clickedEntity) {
+            this.selectAllSameTypeUnits(clickedEntity);
+        }
+    }
+    
+    handleRightClick(e) {
+        if (e.altKey) {
+            // Alt+right-click = Camera pan (handled in camera control)
+            return;
+        }
+        
+        const rect = this.canvas.getBoundingClientRect();
+        const screenX = e.clientX - rect.left;
+        const screenY = e.clientY - rect.top;
+        
+        const clickedEntity = this.getEntityAtPosition(screenX, screenY);
+        
+        if (clickedEntity) {
+            // Right-clicked on entity - could add context menu here
+            return;
+        } else if (this.selectedEntityIds.length > 0) {
+            // Right-clicked on terrain with units selected - move command
+            const worldPos = this.getWorldPositionFromScreen(screenX, screenY);
+            if (worldPos) {
+                this.handleMoveCommand(worldPos, e.ctrlKey);
+            }
+        }
+    }
+    
+    // Helper methods for AoE3-style controls
+    getEntityAtPosition(screenX, screenY) {
         const mouse = new THREE.Vector2(
-            ((e.clientX - rect.left) / rect.width) * 2 - 1,
-            -((e.clientY - rect.top) / rect.height) * 2 + 1
+            (screenX / this.canvas.clientWidth) * 2 - 1,
+            -(screenY / this.canvas.clientHeight) * 2 + 1
         );
         
         this.raycaster.setFromCamera(mouse, this.camera);
         
-        // Check for entity hover
+        // Check for entity intersections
         const entityMeshes = Array.from(this.entityMeshes.values());
         const intersects = this.raycaster.intersectObjects(entityMeshes);
         
         if (intersects.length > 0) {
+            const clickedMesh = intersects[0].object;
+            const entityId = this.getEntityIdFromMesh(clickedMesh);
+            if (entityId) {
+                return this.entities.find(e => e.id === entityId);
+            }
+        }
+        
+        return null;
+    }
+    
+    getWorldPositionFromScreen(screenX, screenY) {
+        const mouse = new THREE.Vector2(
+            (screenX / this.canvas.clientWidth) * 2 - 1,
+            -(screenY / this.canvas.clientHeight) * 2 + 1
+        );
+        
+        this.raycaster.setFromCamera(mouse, this.camera);
+        
+        // Intersect with terrain
+        if (this.terrainMesh) {
+            const intersects = this.raycaster.intersectObject(this.terrainMesh);
+            if (intersects.length > 0) {
+                return intersects[0].point;
+            }
+        }
+        
+        return null;
+    }
+    
+    handleCanvasMouseMove(screenX, screenY) {
+        // Handle cursor changes and hover effects
+        if (this.cameraControl.active || this.dragSelection.active) {
+            // Don't change cursor during active operations
+            return;
+        }
+        
+        const entity = this.getEntityAtPosition(screenX, screenY);
+        
+        if (entity && !this.isAltPressed()) {
             this.canvas.style.cursor = 'pointer';
-            // TODO: Show tooltip
+        } else if (this.isAltPressed()) {
+            this.canvas.style.cursor = 'grab';
         } else {
             this.canvas.style.cursor = 'default';
         }
     }
     
+    isAltPressed() {
+        // Check if Alt key is currently pressed using our tracked state
+        return this.keys.altPressed;
+    }
+    
+    // Camera control methods
+    startCameraControl(e, screenX, screenY) {
+        this.cameraControl.active = true;
+        this.cameraControl.mode = e.button === 0 ? 'orbit' : 'pan'; // Left = orbit, Right = pan
+        this.cameraControl.startX = screenX;
+        this.cameraControl.startY = screenY;
+        this.cameraControl.lastX = screenX;
+        this.cameraControl.lastY = screenY;
+        
+        // Update cursor
+        this.canvas.style.cursor = 'grabbing';
+        
+        // Enable external control mode to disable camera controller's mouse handling
+        if (this.cameraController) {
+            this.cameraController.setExternalControl(true);
+        }
+    }
+    
+    updateCameraControl(e, screenX, screenY) {
+        if (!this.cameraControl.active || !this.cameraController) return;
+        
+        const deltaX = screenX - this.cameraControl.lastX;
+        const deltaY = screenY - this.cameraControl.lastY;
+        
+        if (this.cameraControl.mode === 'orbit') {
+            // Alt + Left drag = Orbit camera
+            this.cameraController.handleOrbitMouseMove(deltaX, deltaY);
+        } else if (this.cameraControl.mode === 'pan') {
+            // Alt + Right drag = Pan camera
+            this.cameraController.panCamera(deltaX, deltaY);
+        }
+        
+        this.cameraControl.lastX = screenX;
+        this.cameraControl.lastY = screenY;
+    }
+    
+    endCameraControl() {
+        this.cameraControl.active = false;
+        this.cameraControl.mode = null;
+        
+        // Restore cursor
+        this.canvas.style.cursor = 'default';
+        
+        // Disable external control mode to re-enable camera controller's mouse handling
+        if (this.cameraController) {
+            this.cameraController.setExternalControl(false);
+        }
+    }
+    
+    // Selection methods (ported from 2D renderer)
+    startDragSelection(screenX, screenY, shiftKey) {
+        this.dragSelection.active = true;
+        this.dragSelection.startX = screenX;
+        this.dragSelection.startY = screenY;
+        this.dragSelection.currentX = screenX;
+        this.dragSelection.currentY = screenY;
+        this.dragSelection.shiftKey = shiftKey;
+        
+        // Completely disable camera controller during selection
+        if (this.cameraController) {
+            this.cameraController.setExternalControl(true);
+            this.cameraController.isDragging = false; // Force stop any camera dragging
+            this.cameraController.dragButton = -1;
+        }
+        
+        console.log('Started drag selection, camera controller disabled');
+    }
+    
+    updateDragSelection(screenX, screenY) {
+        if (!this.dragSelection.active) return;
+        
+        this.dragSelection.currentX = screenX;
+        this.dragSelection.currentY = screenY;
+    }
+    
+    completeDragSelection(shiftKey) {
+        if (!this.dragSelection.active) return;
+        
+        // Convert screen coordinates to world space for selection box
+        const startMouse = new THREE.Vector2(
+            (this.dragSelection.startX / this.canvas.clientWidth) * 2 - 1,
+            -(this.dragSelection.startY / this.canvas.clientHeight) * 2 + 1
+        );
+        
+        const endMouse = new THREE.Vector2(
+            (this.dragSelection.currentX / this.canvas.clientWidth) * 2 - 1,
+            -(this.dragSelection.currentY / this.canvas.clientHeight) * 2 + 1
+        );
+        
+        // Find entities in selection box using frustum selection
+        const entitiesInBox = this.getEntitiesInSelectionBox(startMouse, endMouse);
+        
+        // Apply selection
+        if (!shiftKey && !this.dragSelection.shiftKey) {
+            // Clear existing selection first
+            for (const entityId of this.selectedEntityIds) {
+                if (window.wsManager) {
+                    window.wsManager.selectEntity(entityId, false, false);
+                }
+            }
+        }
+        
+        // Select entities in box
+        for (const entity of entitiesInBox) {
+            if (window.wsManager) {
+                window.wsManager.selectEntity(entity.id, true, true);
+            }
+        }
+        
+        // Reset drag selection
+        this.dragSelection.active = false;
+        
+        // Re-enable camera controller after selection
+        if (this.cameraController) {
+            this.cameraController.setExternalControl(false);
+        }
+        
+        console.log('Completed drag selection, camera controller re-enabled');
+    }
+    
+    getEntitiesInSelectionBox(startMouse, endMouse) {
+        const entitiesInBox = [];
+        
+        // Create selection frustum
+        const minX = Math.min(startMouse.x, endMouse.x);
+        const maxX = Math.max(startMouse.x, endMouse.x);
+        const minY = Math.min(startMouse.y, endMouse.y);
+        const maxY = Math.max(startMouse.y, endMouse.y);
+        
+        // Check each entity to see if it's in the selection box
+        for (const entity of this.entities) {
+            if (entity.destroyed) continue;
+            
+            // Project entity position to screen space
+            const entityPos = new THREE.Vector3(entity.position.x, 0, entity.position.y);
+            if (this.terrainProvider) {
+                entityPos.y = this.terrainProvider.elevationAt(entity.position.x, entity.position.y) + 2;
+            }
+            
+            const screenPos = entityPos.clone().project(this.camera);
+            
+            // Check if entity is within selection box
+            if (screenPos.x >= minX && screenPos.x <= maxX &&
+                screenPos.y >= minY && screenPos.y <= maxY &&
+                screenPos.z >= -1 && screenPos.z <= 1) { // Within camera frustum
+                entitiesInBox.push(entity);
+            }
+        }
+        
+        return entitiesInBox;
+    }
+    
+    selectAllSameTypeUnits(clickedEntity) {
+        const worldPos = { x: clickedEntity.position.x, y: clickedEntity.position.y };
+        const sameTypeEntities = this.entities.filter(entity => {
+            if (entity.destroyed || entity.type !== clickedEntity.type) return false;
+            
+            const distance = Math.sqrt(
+                Math.pow(entity.position.x - worldPos.x, 2) +
+                Math.pow(entity.position.y - worldPos.y, 2)
+            );
+            
+            return distance <= this.doubleClickRadius;
+        });
+        
+        // Clear existing selection
+        for (const entityId of this.selectedEntityIds) {
+            if (window.wsManager) {
+                window.wsManager.selectEntity(entityId, false, false);
+            }
+        }
+        
+        // Select all same-type entities
+        for (const entity of sameTypeEntities) {
+            if (window.wsManager) {
+                window.wsManager.selectEntity(entity.id, true, true);
+            }
+        }
+    }
+    
+    handleMoveCommand(worldPos, isAppend) {
+        // Send movement commands for selected entities
+        if (this.selectedEntityIds.length > 0 && window.wsManager) {
+            const target = { x: worldPos.x, y: worldPos.z }; // Convert 3D to 2D coords
+            
+            for (const entityId of this.selectedEntityIds) {
+                const entity = this.entities.find(e => e.id === entityId);
+                if (!entity || entity.destroyed) continue;
+                
+                let command;
+                if (isAppend && entity.patrol_route && entity.patrol_route.length > 0) {
+                    // Ctrl+Click: Append to existing route
+                    const newRoute = [...entity.patrol_route, target];
+                    command = {
+                        mode: 'waypoint_mode',
+                        patrol_route: newRoute
+                    };
+                } else {
+                    // Normal Click: Move to single waypoint
+                    command = {
+                        mode: 'waypoint_mode',
+                        patrol_route: [target]
+                    };
+                }
+                
+                window.wsManager.commandEntity(entityId, command);
+            }
+        }
+    }
+    
     handleKeyDown(e) {
+        // Track key states
+        if (e.code === 'AltLeft' || e.code === 'AltRight') {
+            this.keys.altPressed = true;
+        }
+        
         switch (e.code) {
             case 'KeyR':
                 if (this.cameraController) {
@@ -449,6 +859,13 @@ class Renderer3D {
             case 'KeyH':
                 this.toggleHelpOverlay();
                 break;
+        }
+    }
+    
+    handleKeyUp(e) {
+        // Track key states
+        if (e.code === 'AltLeft' || e.code === 'AltRight') {
+            this.keys.altPressed = false;
         }
     }
     
@@ -792,8 +1209,106 @@ class Renderer3D {
             return;
         }
         
+        // Render 2D overlays (selection box, UI elements)
+        this.renderOverlays();
+        
         // Update performance metrics
         this.updatePerformanceMetrics();
+    }
+    
+    renderOverlays() {
+        // Get 2D context for overlays
+        if (!this.overlayCanvas) {
+            this.overlayCanvas = document.createElement('canvas');
+            this.overlayCanvas.style.position = 'absolute';
+            this.overlayCanvas.style.pointerEvents = 'none';
+            this.overlayCanvas.style.zIndex = '10';
+            this.overlayContext = this.overlayCanvas.getContext('2d');
+            this.canvas.parentNode.appendChild(this.overlayCanvas);
+        }
+        
+        // Update overlay canvas size and position to match main canvas exactly
+        const rect = this.canvas.getBoundingClientRect();
+        const containerRect = this.canvas.parentNode.getBoundingClientRect();
+        
+        // Position overlay canvas exactly over main canvas
+        this.overlayCanvas.style.left = (rect.left - containerRect.left) + 'px';
+        this.overlayCanvas.style.top = (rect.top - containerRect.top) + 'px';
+        
+        if (this.overlayCanvas.width !== rect.width || this.overlayCanvas.height !== rect.height) {
+            this.overlayCanvas.width = rect.width;
+            this.overlayCanvas.height = rect.height;
+            this.overlayCanvas.style.width = rect.width + 'px';
+            this.overlayCanvas.style.height = rect.height + 'px';
+        }
+        
+        // Clear overlay
+        this.overlayContext.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+        
+        // Draw selection box
+        if (this.dragSelection.active) {
+            this.drawSelectionBox();
+        }
+        
+        // Draw control mode indicator
+        this.drawControlModeIndicator();
+    }
+    
+    drawSelectionBox() {
+        if (!this.dragSelection.active) return;
+        
+        const ctx = this.overlayContext;
+        
+        // Use coordinates directly since overlay canvas is positioned exactly over main canvas
+        const startX = this.dragSelection.startX;
+        const startY = this.dragSelection.startY;
+        const endX = this.dragSelection.currentX;
+        const endY = this.dragSelection.currentY;
+        
+        const x = Math.min(startX, endX);
+        const y = Math.min(startY, endY);
+        const width = Math.abs(endX - startX);
+        const height = Math.abs(endY - startY);
+        
+        // Draw selection box (similar to 2D renderer)
+        ctx.strokeStyle = '#00AAFF';
+        ctx.fillStyle = '#00AAFF20';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]); // Dashed line for better visibility
+        
+        ctx.fillRect(x, y, width, height);
+        ctx.strokeRect(x, y, width, height);
+        
+        ctx.setLineDash([]); // Reset line dash
+    }
+    
+    drawControlModeIndicator() {
+        const ctx = this.overlayContext;
+        
+        // Show control mode in top-left corner
+        let modeText = '';
+        if (this.cameraControl.active) {
+            modeText = this.cameraControl.mode === 'orbit' ? 'CAMERA ORBIT' : 'CAMERA PAN';
+        } else if (this.dragSelection.active) {
+            modeText = 'SELECTING';
+        } else {
+            // Check if Alt is pressed for visual feedback
+            const altPressed = this.isAltPressed();
+            if (altPressed) {
+                modeText = 'CAMERA MODE (Alt)';
+            } else {
+                modeText = 'SELECTION MODE';
+            }
+        }
+        
+        if (modeText) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(10, 10, 150, 25);
+            
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '12px Arial';
+            ctx.fillText(modeText, 15, 27);
+        }
     }
     
     updatePerformanceMetrics() {
@@ -888,6 +1403,15 @@ class Renderer3D {
             // Clear terrain
             this.terrainProvider = null;
             this.terrainMesh = null;
+            
+            // Clean up overlay canvas
+            if (this.overlayCanvas) {
+                if (this.overlayCanvas.parentNode) {
+                    this.overlayCanvas.parentNode.removeChild(this.overlayCanvas);
+                }
+                this.overlayCanvas = null;
+                this.overlayContext = null;
+            }
             
             console.log('3D renderer disposed');
         } catch (error) {
