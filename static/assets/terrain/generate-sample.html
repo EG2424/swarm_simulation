@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Heightmap Generator</title>
+</head>
+<body>
+    <h3>Sample Heightmap Generator</h3>
+    <button onclick="generateHeightmap()">Generate Sample Heightmap</button>
+    <br><br>
+    <canvas id="heightmap" width="128" height="128" style="border:1px solid #ccc; image-rendering: pixelated;"></canvas>
+    <br><br>
+    <a id="download" style="display:none;">Download Heightmap</a>
+
+    <script>
+        function generateHeightmap() {
+            const canvas = document.getElementById('heightmap');
+            const ctx = canvas.getContext('2d');
+            const width = 128;
+            const height = 128;
+            
+            const imageData = ctx.createImageData(width, height);
+            const data = imageData.data;
+            
+            // Generate Perlin-like noise
+            for (let z = 0; z < height; z++) {
+                for (let x = 0; x < width; x++) {
+                    const index = (z * width + x) * 4;
+                    const nx = x / width;
+                    const nz = z / height;
+                    
+                    // Create interesting terrain with valleys and hills
+                    let value = 0;
+                    
+                    // Large features
+                    value += Math.sin(nx * Math.PI * 2) * Math.cos(nz * Math.PI * 2) * 0.3;
+                    
+                    // Medium features
+                    value += Math.sin(nx * Math.PI * 6) * Math.cos(nz * Math.PI * 6) * 0.2;
+                    
+                    // Small details
+                    value += Math.sin(nx * Math.PI * 12) * Math.cos(nz * Math.PI * 12) * 0.1;
+                    
+                    // Add some randomness
+                    value += (Math.random() - 0.5) * 0.1;
+                    
+                    // Create a central valley
+                    const centerX = 0.5;
+                    const centerZ = 0.5;
+                    const distFromCenter = Math.sqrt((nx - centerX) ** 2 + (nz - centerZ) ** 2);
+                    value -= distFromCenter * 0.3;
+                    
+                    // Normalize to 0-255
+                    const gray = Math.floor(Math.max(0, Math.min(1, (value + 1) * 0.5)) * 255);
+                    
+                    data[index] = gray;     // R
+                    data[index + 1] = gray; // G
+                    data[index + 2] = gray; // B
+                    data[index + 3] = 255;  // A
+                }
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            
+            // Create download link
+            canvas.toBlob(function(blob) {
+                const url = URL.createObjectURL(blob);
+                const link = document.getElementById('download');
+                link.href = url;
+                link.download = 'sample_heightmap.png';
+                link.textContent = 'Download sample_heightmap.png';
+                link.style.display = 'inline';
+            });
+        }
+        
+        // Auto-generate on load
+        window.onload = generateHeightmap;
+    </script>
+</body>
+</html>

@@ -5,9 +5,11 @@
       "Bash(git add:*)",
       "Bash(./start.bat)",
       "Bash(start http://localhost:8000)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(mkdir:*)"
     ],
     "deny": [],
-    "ask": []
+    "ask": [],
+    "defaultMode": "acceptEdits"
   }
 }
