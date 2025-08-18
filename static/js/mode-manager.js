@@ -69,6 +69,14 @@ class ModeManager {
             return;
         }
         
+        // Check if mode toggle already exists to prevent duplicates
+        const existingModeGroup = document.querySelector('.mode-toggle-group');
+        if (existingModeGroup) {
+            console.log('Mode toggle already exists, updating existing buttons');
+            this.updateExistingModeButtons();
+            return;
+        }
+        
         // Create mode toggle control group
         const modeGroup = document.createElement('div');
         modeGroup.className = 'control-group mode-toggle-group';
@@ -79,8 +87,6 @@ class ModeManager {
                 <button id="mode-3d-btn" class="mode-btn ${this.currentMode === '3d' ? 'active' : ''}" 
                         ${!this.is3DSupported ? 'disabled title="WebGL not supported"' : ''}>3D</button>
             </div>
-            <button id="help-3d-btn" class="help-btn ${this.currentMode === '3d' ? 'visible' : ''}" 
-                    title="Show 3D controls help">?</button>
         `;
         
         // Insert at the beginning of canvas controls
@@ -97,17 +103,46 @@ class ModeManager {
             }
         });
         
-        document.getElementById('help-3d-btn').addEventListener('click', () => {
-            if (window.helpOverlay) {
-                window.helpOverlay.show();
-            }
-        });
         
         // Add CSS for mode toggle
         this.addModeToggleCSS();
         
         // Update camera distance slider label for 3D
         this.updateCameraControlsForMode();
+    }
+    
+    updateExistingModeButtons() {
+        // Update existing buttons if they exist
+        const btn2D = document.getElementById('mode-2d-btn');
+        const btn3D = document.getElementById('mode-3d-btn');
+        
+        if (btn2D && btn3D) {
+            // Update active states
+            btn2D.classList.toggle('active', this.currentMode === '2d');
+            btn3D.classList.toggle('active', this.currentMode === '3d');
+            
+            // Update 3D button state
+            if (!this.is3DSupported) {
+                btn3D.disabled = true;
+                btn3D.title = 'WebGL not supported';
+            } else {
+                btn3D.disabled = false;
+                btn3D.removeAttribute('title');
+            }
+            
+            // Add event listeners if they don't exist
+            if (!btn2D.hasAttribute('data-listener-added')) {
+                btn2D.addEventListener('click', () => this.switchMode('2d'));
+                btn2D.setAttribute('data-listener-added', 'true');
+            }
+            
+            if (!btn3D.hasAttribute('data-listener-added')) {
+                btn3D.addEventListener('click', () => {
+                    if (this.is3DSupported) this.switchMode('3d');
+                });
+                btn3D.setAttribute('data-listener-added', 'true');
+            }
+        }
     }
     
     addModeToggleCSS() {
@@ -525,15 +560,10 @@ class ModeManager {
     updateModeButtons() {
         const btn2D = document.getElementById('mode-2d-btn');
         const btn3D = document.getElementById('mode-3d-btn');
-        const helpBtn = document.getElementById('help-3d-btn');
         
         if (btn2D && btn3D) {
             btn2D.classList.toggle('active', this.currentMode === '2d');
             btn3D.classList.toggle('active', this.currentMode === '3d');
-        }
-        
-        if (helpBtn) {
-            helpBtn.classList.toggle('visible', this.currentMode === '3d');
         }
     }
     

@@ -445,27 +445,33 @@ class Renderer3D {
         const screenX = e.clientX - rect.left;
         const screenY = e.clientY - rect.top;
         
-        if (e.altKey) {
-            // Alt held = Camera control mode
+        // Fusion 360 style camera controls
+        const isFusionCameraControl = (
+            e.button === 1 || // Middle mouse orbit
+            (e.button === 0 && e.shiftKey) || // Shift+Left pan
+            e.button === 2 // Right pan
+        );
+        
+        if (isFusionCameraControl) {
+            // Fusion 360 camera control
             this.startCameraControl(e, screenX, screenY);
-        } else if (e.button === 0) {
-            // Left mouse without Alt = Unit selection
+        } else if (e.button === 0 && !e.shiftKey) {
+            // Left mouse without Shift = Unit selection
             const clickedEntity = this.getEntityAtPosition(screenX, screenY);
             
             if (clickedEntity) {
                 // Entity clicked - handle selection
+                console.log('Entity clicked:', clickedEntity.id);
                 this.handleEntityClick(clickedEntity.id, e.shiftKey);
             } else {
                 // Empty space clicked - start drag selection
+                console.log('Empty space clicked - starting drag selection');
                 this.startDragSelection(screenX, screenY, e.shiftKey);
             }
             
             // Prevent camera controller from handling this event
             e.preventDefault();
             e.stopPropagation();
-        } else {
-            // For non-left clicks without Alt, allow camera controller to handle
-            return;
         }
         
         e.preventDefault();
@@ -632,14 +638,27 @@ class Renderer3D {
     // Camera control methods
     startCameraControl(e, screenX, screenY) {
         this.cameraControl.active = true;
-        this.cameraControl.mode = e.button === 0 ? 'orbit' : 'pan'; // Left = orbit, Right = pan
+        
+        // Fusion 360-style button mapping
+        switch (e.button) {
+            case 0: // Shift+Left = Pan
+                this.cameraControl.mode = 'pan';
+                this.canvas.style.cursor = 'move';
+                break;
+            case 1: // Middle = Orbit/Rotate
+                this.cameraControl.mode = 'orbit';
+                this.canvas.style.cursor = 'grabbing';
+                break;
+            case 2: // Right = Pan
+                this.cameraControl.mode = 'pan';
+                this.canvas.style.cursor = 'move';
+                break;
+        }
+        
         this.cameraControl.startX = screenX;
         this.cameraControl.startY = screenY;
         this.cameraControl.lastX = screenX;
         this.cameraControl.lastY = screenY;
-        
-        // Update cursor
-        this.canvas.style.cursor = 'grabbing';
         
         // Enable external control mode to disable camera controller's mouse handling
         if (this.cameraController) {
@@ -653,12 +672,14 @@ class Renderer3D {
         const deltaX = screenX - this.cameraControl.lastX;
         const deltaY = screenY - this.cameraControl.lastY;
         
-        if (this.cameraControl.mode === 'orbit') {
-            // Alt + Left drag = Orbit camera
-            this.cameraController.handleOrbitMouseMove(deltaX, deltaY);
-        } else if (this.cameraControl.mode === 'pan') {
-            // Alt + Right drag = Pan camera
-            this.cameraController.panCamera(deltaX, deltaY);
+        // Fusion 360-style controls
+        switch (this.cameraControl.mode) {
+            case 'orbit': // Middle = Rotate/Orbit
+                this.cameraController.handleOrbitMouseMove(deltaX, deltaY);
+                break;
+            case 'pan': // Shift+Left or Right = Pan
+                this.cameraController.panCamera(deltaX, deltaY);
+                break;
         }
         
         this.cameraControl.lastX = screenX;
@@ -704,37 +725,70 @@ class Renderer3D {
         this.dragSelection.currentY = screenY;
     }
     
-    completeDragSelection(shiftKey) {
+    async completeDragSelection(shiftKey) {
         if (!this.dragSelection.active) return;
         
-        // Convert screen coordinates to world space for selection box
-        const startMouse = new THREE.Vector2(
-            (this.dragSelection.startX / this.canvas.clientWidth) * 2 - 1,
-            -(this.dragSelection.startY / this.canvas.clientHeight) * 2 + 1
-        );
+        // Check if this was actually a drag or just a click
+        const dragDistance = Math.abs(this.dragSelection.currentX - this.dragSelection.startX) + 
+                            Math.abs(this.dragSelection.currentY - this.dragSelection.startY);
+        const isActualDrag = dragDistance > 3; // Minimum pixels for a drag
         
-        const endMouse = new THREE.Vector2(
-            (this.dragSelection.currentX / this.canvas.clientWidth) * 2 - 1,
-            -(this.dragSelection.currentY / this.canvas.clientHeight) * 2 + 1
-        );
-        
-        // Find entities in selection box using frustum selection
-        const entitiesInBox = this.getEntitiesInSelectionBox(startMouse, endMouse);
-        
-        // Apply selection
-        if (!shiftKey && !this.dragSelection.shiftKey) {
-            // Clear existing selection first
-            for (const entityId of this.selectedEntityIds) {
+        if (isActualDrag) {
+            // Convert screen coordinates to world space for selection box
+            const startMouse = new THREE.Vector2(
+                (this.dragSelection.startX / this.canvas.clientWidth) * 2 - 1,
+                -(this.dragSelection.startY / this.canvas.clientHeight) * 2 + 1
+            );
+            
+            const endMouse = new THREE.Vector2(
+                (this.dragSelection.currentX / this.canvas.clientWidth) * 2 - 1,
+                -(this.dragSelection.currentY / this.canvas.clientHeight) * 2 + 1
+            );
+            
+            // Find entities in selection box using frustum selection
+            const entitiesInBox = this.getEntitiesInSelectionBox(startMouse, endMouse);
+            
+            console.log('Drag selection completed. Entities in box:', entitiesInBox.length, 'ShiftKey:', shiftKey);
+            
+            // Apply selection for drag operation
+            if (!shiftKey && !this.dragSelection.shiftKey) {
+                // Clear existing selection first - make a copy of the array to avoid modification during iteration
+                const currentlySelected = [...this.selectedEntityIds];
+                console.log('Clearing existing selection:', currentlySelected);
+                
+                for (const entityId of currentlySelected) {
+                    if (window.wsManager) {
+                        console.log('Deselecting entity:', entityId);
+                        window.wsManager.selectEntity(entityId, false, false);
+                    }
+                }
+                
+                // Wait a frame to ensure deselection is processed
+                await new Promise(resolve => requestAnimationFrame(resolve));
+            }
+            
+            // Select entities in box
+            console.log('Selecting entities in box:', entitiesInBox.map(e => e.id));
+            for (const entity of entitiesInBox) {
                 if (window.wsManager) {
-                    window.wsManager.selectEntity(entityId, false, false);
+                    console.log('Selecting entity:', entity.id);
+                    window.wsManager.selectEntity(entity.id, true, true);
                 }
             }
-        }
-        
-        // Select entities in box
-        for (const entity of entitiesInBox) {
-            if (window.wsManager) {
-                window.wsManager.selectEntity(entity.id, true, true);
+        } else {
+            // This was just a click on empty space, not a drag - deselect everything
+            console.log('This was a click, not drag. Deselecting entities...');
+            if (!shiftKey && !this.dragSelection.shiftKey) {
+                console.log('Deselecting', this.selectedEntityIds.length, 'entities');
+                for (const entityId of this.selectedEntityIds) {
+                    if (window.wsManager) {
+                        console.log('Deselecting entity:', entityId);
+                        window.wsManager.selectEntity(entityId, false, false);
+                    }
+                }
+                console.log('Deselected all entities due to empty space click');
+            } else {
+                console.log('Shift key held, not deselecting');
             }
         }
         
@@ -918,6 +972,7 @@ class Renderer3D {
     
     // Public API methods
     updateEntities(entities, selectedEntityIds = []) {
+        console.log('3D Renderer - updateEntities called with selectedEntityIds:', selectedEntityIds);
         this.entities = entities || [];
         this.selectedEntityIds = selectedEntityIds || [];
         this.updateEntityMeshes();
@@ -949,8 +1004,11 @@ class Renderer3D {
             }
         }
         
-        // Temporarily disable selection highlights to test blue rectangles
-        // this.updateSelectionHighlights();
+        // Update selection highlights
+        this.updateSelectionHighlights();
+        
+        // Update selection highlight positions to follow entities
+        this.updateSelectionHighlightPositions();
         
         // Update detection ranges and patrol routes
         if (this.showDetectionRanges) {
@@ -1012,35 +1070,84 @@ class Renderer3D {
     }
     
     updateSelectionHighlights() {
-        for (const [entityId, mesh] of this.entityMeshes.entries()) {
-            const isSelected = this.selectedEntityIds.includes(entityId);
-            
-            // Debug selection states
-            if (mesh.userData.entityType === 'tank') {
-                console.log(`Tank ${entityId.substring(0,8)}: isSelected=${isSelected}, selectedIds=${this.selectedEntityIds.length}`);
+        console.log('Updating selection highlights for selectedEntityIds:', this.selectedEntityIds);
+        
+        // First, remove ALL existing selection helpers to ensure clean state
+        this.scene.children.forEach(child => {
+            if (child.userData && child.userData.isSelectionHelper) {
+                this.scene.remove(child);
+                // Dispose geometry and material of the ring
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
             }
+        });
+        
+        // Clear all selection helper references
+        for (const [entityId, mesh] of this.entityMeshes.entries()) {
+            mesh.userData.selectionHelper = null;
+        }
+        
+        // Now add glowing outline effects only for selected entities
+        for (const selectedEntityId of this.selectedEntityIds) {
+            const mesh = this.entityMeshes.get(selectedEntityId);
+            if (!mesh) continue;
             
-            if (isSelected) {
-                // Add selection glow/outline
-                if (!mesh.userData.selectionHelper) {
-                    const outlineGeometry = new THREE.RingGeometry(10, 12, 16);
-                    const outlineMaterial = new THREE.MeshBasicMaterial({
-                        color: 0xFFD700,
-                        transparent: true,
-                        opacity: 0.8
-                    });
-                    const outline = new THREE.Mesh(outlineGeometry, outlineMaterial);
-                    outline.rotation.x = -Math.PI / 2; // Lay flat on ground
-                    outline.position.y = -1.5; // Slightly below entity
-                    mesh.add(outline);
-                    mesh.userData.selectionHelper = outline;
-                }
-            } else {
-                // Remove selection helper
-                if (mesh.userData.selectionHelper) {
-                    mesh.remove(mesh.userData.selectionHelper);
-                    mesh.userData.selectionHelper = null;
-                }
+            console.log(`Creating single circle selection for selected entity ${selectedEntityId}`);
+            
+            // Create a simple single circle around the entity
+            const ringRadius = 12;
+            const ringGeometry = new THREE.RingGeometry(ringRadius, ringRadius + 1.5, 32);
+            const ringMaterial = new THREE.MeshBasicMaterial({
+                color: 0xFFD700, // Golden color
+                transparent: true,
+                opacity: 0.8,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            });
+            
+            const ringMesh = new THREE.Mesh(ringGeometry, ringMaterial);
+            ringMesh.rotation.x = -Math.PI / 2; // Lay flat horizontally
+            
+            // Position the ring at entity location
+            ringMesh.position.copy(mesh.position);
+            ringMesh.position.y += 1; // Slightly above entity center
+            
+            // Mark as selection helper
+            ringMesh.userData.isSelectionHelper = true;
+            ringMesh.userData.entityId = selectedEntityId;
+            
+            // Add to scene and store reference
+            this.scene.add(ringMesh);
+            mesh.userData.selectionHelper = ringMesh;
+            
+            console.log(`Added 3D selection highlight for entity ${selectedEntityId}`);
+        }
+        
+        console.log(`Selection highlights updated: ${this.selectedEntityIds.length} highlights created`);
+    }
+    
+    updateSelectionHighlightPositions() {
+        const time = performance.now() * 0.001; // Gentle animation speed
+        
+        // Update positions of existing selection rings to follow entities
+        for (const [entityId, mesh] of this.entityMeshes.entries()) {
+            if (mesh.userData.selectionHelper) {
+                const ring = mesh.userData.selectionHelper;
+                
+                // Update ring position to match entity
+                ring.position.copy(mesh.position);
+                ring.position.y += 1; // Keep slightly above entity center
+                
+                // Gentle rotation around Y axis
+                ring.rotation.z = time * 0.5;
+                
+                // Subtle pulse animation
+                const pulseScale = 1.0 + Math.sin(time * 2) * 0.05;
+                ring.scale.setScalar(pulseScale);
+                
+                // Gentle opacity breathing
+                const pulseOpacity = 0.7 + Math.sin(time * 1.5) * 0.2;
+                ring.material.opacity = pulseOpacity;
             }
         }
     }
@@ -1100,10 +1207,17 @@ class Renderer3D {
         
         if (!this.showPatrolRoutes) return;
         
-        // Only show patrol routes for SELECTED entities (like 2D mode)
+        // Only show patrol routes for SELECTED entities AND entities in waypoint mode (like 2D mode)
         for (const entity of this.entities) {
             const isSelected = this.selectedEntityIds.includes(entity.id);
-            if (isSelected && entity.patrol_route && entity.patrol_route.length > 0) {
+            const isInWaypointMode = entity.mode === 'waypoint_mode' || entity.mode === 'patrol_route';
+            const hasRoutes = entity.patrol_route && entity.patrol_route.length > 0;
+            
+            console.log(`Entity ${entity.id}: selected=${isSelected}, mode=${entity.mode}, waypoint_mode=${isInWaypointMode}, routes=${hasRoutes ? entity.patrol_route.length : 0}`);
+            
+            // Show waypoints for selected entities that have waypoints OR are in waypoint mode
+            if (isSelected && isInWaypointMode && hasRoutes) {
+                console.log(`Creating patrol route for selected entity ${entity.id} with ${entity.patrol_route.length} waypoints`);
                 const route = this.createPatrolRoute(entity);
                 if (route) {
                     this.sceneGroups.routes.add(route);
@@ -1113,8 +1227,10 @@ class Renderer3D {
     }
     
     createPatrolRoute(entity) {
+        const routeGroup = new THREE.Group();
         const points = [];
         
+        // Create route line
         for (const waypoint of entity.patrol_route) {
             const y = this.terrainProvider ? 
                 this.terrainProvider.elevationAt(waypoint.x, waypoint.y) + 1 : 1;
@@ -1126,16 +1242,81 @@ class Renderer3D {
             points.push(points[0]);
         }
         
+        // Create the route line
         const geometry = new THREE.BufferGeometry().setFromPoints(points);
         const isSelected = this.selectedEntityIds.includes(entity.id);
         const material = new THREE.LineBasicMaterial({
             color: isSelected ? 0xFFD700 : 0x007AFF,
             transparent: true,
             opacity: isSelected ? 0.9 : 0.6,
-            linewidth: isSelected ? 3 : 1
+            linewidth: 3
         });
         
-        return new THREE.Line(geometry, material);
+        const routeLine = new THREE.Line(geometry, material);
+        routeGroup.add(routeLine);
+        
+        // Add waypoint markers (enhanced like 2D mode with numbering)
+        for (let i = 0; i < entity.patrol_route.length; i++) {
+            const waypoint = entity.patrol_route[i];
+            const y = this.terrainProvider ? 
+                this.terrainProvider.elevationAt(waypoint.x, waypoint.y) + 2 : 2;
+            
+            const waypointGroup = new THREE.Group();
+            waypointGroup.position.set(waypoint.x, y, waypoint.y);
+            
+            // Create outer white circle (background)
+            const outerGeometry = new THREE.CircleGeometry(4, 16);
+            const outerMaterial = new THREE.MeshBasicMaterial({
+                color: 0xFFFFFF,
+                transparent: true,
+                opacity: 0.9,
+                side: THREE.DoubleSide
+            });
+            const outerCircle = new THREE.Mesh(outerGeometry, outerMaterial);
+            outerCircle.rotation.x = -Math.PI / 2;
+            waypointGroup.add(outerCircle);
+            
+            // Create inner golden circle
+            const innerGeometry = new THREE.CircleGeometry(3, 16);
+            const innerMaterial = new THREE.MeshBasicMaterial({
+                color: isSelected ? 0xFFD700 : 0x007AFF,
+                transparent: true,
+                opacity: 1.0,
+                side: THREE.DoubleSide
+            });
+            const innerCircle = new THREE.Mesh(innerGeometry, innerMaterial);
+            innerCircle.rotation.x = -Math.PI / 2;
+            innerCircle.position.y = 0.1; // Slightly above outer circle
+            waypointGroup.add(innerCircle);
+            
+            // Add waypoint number text (billboard to always face camera)
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = 64;
+            canvas.height = 64;
+            
+            context.fillStyle = '#000000';
+            context.font = 'bold 32px Arial';
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.fillText((i + 1).toString(), 32, 32);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const textMaterial = new THREE.SpriteMaterial({ 
+                map: texture,
+                transparent: true,
+                opacity: 0.9
+            });
+            const textSprite = new THREE.Sprite(textMaterial);
+            textSprite.scale.set(4, 4, 1);
+            textSprite.position.y = 1; // Above the circles
+            waypointGroup.add(textSprite);
+            
+            routeGroup.add(waypointGroup);
+        }
+        
+        console.log(`Created patrol route for entity ${entity.id} with ${entity.patrol_route.length} waypoints`);
+        return routeGroup;
     }
     
     // Layer toggle methods
@@ -1249,9 +1430,6 @@ class Renderer3D {
         if (this.dragSelection.active) {
             this.drawSelectionBox();
         }
-        
-        // Draw control mode indicator
-        this.drawControlModeIndicator();
     }
     
     drawSelectionBox() {
@@ -1282,34 +1460,6 @@ class Renderer3D {
         ctx.setLineDash([]); // Reset line dash
     }
     
-    drawControlModeIndicator() {
-        const ctx = this.overlayContext;
-        
-        // Show control mode in top-left corner
-        let modeText = '';
-        if (this.cameraControl.active) {
-            modeText = this.cameraControl.mode === 'orbit' ? 'CAMERA ORBIT' : 'CAMERA PAN';
-        } else if (this.dragSelection.active) {
-            modeText = 'SELECTING';
-        } else {
-            // Check if Alt is pressed for visual feedback
-            const altPressed = this.isAltPressed();
-            if (altPressed) {
-                modeText = 'CAMERA MODE (Alt)';
-            } else {
-                modeText = 'SELECTION MODE';
-            }
-        }
-        
-        if (modeText) {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            ctx.fillRect(10, 10, 150, 25);
-            
-            ctx.fillStyle = '#FFFFFF';
-            ctx.font = '12px Arial';
-            ctx.fillText(modeText, 15, 27);
-        }
-    }
     
     updatePerformanceMetrics() {
         this.frameCount++;

@@ -82,14 +82,20 @@ class CameraController3D {
     }
     
     onMouseDown(e) {
-        // Don't handle mouse events if external control is active (Alt+drag or selection)
+        // Don't handle mouse events if external control is active (selection mode)
         if (this.isExternalControlled()) {
             e.stopPropagation();
             return;
         }
         
-        // IMPORTANT: Only handle mouse events when Alt is pressed
-        if (!e.altKey) {
+        // Fusion 360 style: Middle mouse always works, Shift+Left for pan, Right for pan
+        const isValidFusionControl = (
+            e.button === 1 || // Middle mouse always works for orbit
+            (e.button === 0 && e.shiftKey) || // Shift+Left for pan
+            e.button === 2 // Right mouse for pan
+        );
+        
+        if (!isValidFusionControl) {
             e.stopPropagation();
             return;
         }
@@ -110,8 +116,18 @@ class CameraController3D {
             return;
         }
         
-        // Only handle mouse move when Alt is pressed
-        if (!e.altKey) {
+        // Fusion 360 validation during move
+        const isValidFusionControl = (
+            this.dragButton === 1 || // Middle mouse orbit
+            (this.dragButton === 0 && e.shiftKey) || // Shift+Left pan
+            this.dragButton === 2 // Right pan
+        );
+        
+        if (!isValidFusionControl) {
+            // Stop dragging if modifier key was released
+            this.isDragging = false;
+            this.dragButton = -1;
+            this.canvas.style.cursor = 'default';
             e.stopPropagation();
             return;
         }
@@ -184,10 +200,11 @@ class CameraController3D {
     }
     
     getCursorForButton(button) {
+        // Fusion 360-style cursor indicators
         switch (button) {
-            case 0: return 'grab'; // LMB - orbit
-            case 1: return 'move'; // MMB - pan
-            case 2: return 'move'; // RMB - pan
+            case 0: return 'move'; // Shift+Left - Pan
+            case 1: return 'grab'; // Middle - Orbit/Rotate
+            case 2: return 'move'; // Right - Pan
             default: return 'default';
         }
     }
@@ -203,22 +220,19 @@ class CameraController3D {
     handleOrbitMouseMoveWithButton(deltaX, deltaY) {
         const sensitivity = this.config.mouseSensitivity;
         
+        // Fusion 360-style mouse controls
         switch (this.dragButton) {
-            case 0: // LMB - orbit
+            case 0: // Shift+Left - Pan
+                this.panCamera(deltaX, deltaY);
+                break;
+                
+            case 1: // Middle - Orbit/Rotate
                 this.sphericalDelta.theta -= deltaX * sensitivity;
                 this.sphericalDelta.phi -= deltaY * sensitivity;
                 break;
                 
-            case 2: // RMB - pan
+            case 2: // Right - Pan (same as Shift+Left)
                 this.panCamera(deltaX, deltaY);
-                break;
-                
-            case 1: // MMB - tilt/alternative pan
-                if (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')) {
-                    this.panCamera(deltaX, deltaY);
-                } else {
-                    this.sphericalDelta.phi -= deltaY * sensitivity;
-                }
                 break;
         }
     }
